@@ -307,7 +307,7 @@ job_urls = lade_job_urls()
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="NOVOTERGUM Chatbot")
-st.title("NOVOTERGUM Bewerbungs-FAQ Chatbot 😊")
+st.title("NOVOTERGUM Chatbot 😊")
 st.caption("Letztes Update: 2025-07-13")
 
 params = st.query_params
