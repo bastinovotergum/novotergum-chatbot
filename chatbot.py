@@ -13,7 +13,7 @@ except Exception:
     frage_von_url = ""
 
 # --- Initialisierung ---
-model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # --- Hilfsfunktion: Frage betrifft Standort? ---
 def frage_betrifft_standort(user_input):
