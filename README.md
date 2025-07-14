@@ -35,10 +35,10 @@ Antwort: Deine Antwort hier
 ## 🌐 Beispiel-URL
 
 - Öffnungszeiten in Menden:  
-  https://novotergum-chatbot-hxkkzdnnwaenchvfueber7.streamlit.app/?frage=Öffnungszeiten%20Menden
+  https://novotergum-chatbot.streamlit.app/?frage=%C3%96ffnungszeiten%20Menden
 
 - Jobs in Düsseldorf:  
-  https://novotergum-chatbot-hxkkzdnnwaenchvfueber7.streamlit.app/?frage=Jobs%20Düsseldorf
+  https://novotergum-chatbot.streamlit.app/?frage=Jobs%20Düsseldorf
 ---
 
 ## 📄 Lizenz
