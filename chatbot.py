@@ -49,8 +49,6 @@ def format_oeffnungszeiten(opening_node):
 @st.cache_resource(show_spinner=False)
 def lade_standorte(xml_path):
 
-    primary_category = eintrag.findtext("primary_category", default="").lower()
-
     try:
         tree = ET.parse(xml_path)
         root = tree.getroot()
@@ -58,6 +56,7 @@ def lade_standorte(xml_path):
 
         for eintrag in root.findall("standort"):
             name = eintrag.findtext("title", default="")
+            primary_category = eintrag.findtext("primary_category", default="").lower()
             stadt = eintrag.findtext("stadt", default="")
             adresse = eintrag.findtext("strasse", default="") + " " + eintrag.findtext("postleitzahl", default="")
             telefon = eintrag.findtext("telefon", default="")
