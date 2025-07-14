@@ -356,7 +356,7 @@ frage = st.text_input("Stelle deine Frage:", value=vorgegebene_frage)
 def format_standort(eintrag):
     return (
         f"📍 **{eintrag['adresse']}**\n"
-        f"f"📞 [{eintrag['telefon']}](tel:{eintrag['telefon'].replace(' ', '')})\n"
+        f"📞 [{eintrag['telefon']}](tel:{eintrag['telefon'].replace(' ', '')})\n"
         f"🕒 {eintrag['zeiten']}\n"
         f"[🌍 Google Maps öffnen]({eintrag['maps']})"
     )
