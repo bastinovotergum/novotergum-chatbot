@@ -140,10 +140,10 @@ def filtere_jobs_nach_beruf(job_urls, frage):
     frage_norm = normalisiere(frage)
 
     relevante_berufe = {
-        "physiotherapeut": ["physiotherapeut", "kinderphysiotherapeut", "mt", "kgg", "training", "sport"],
-        "logopäde": ["logopäde", "logopaedie", "logopädie", "sprachtherapie"],
-        "ergotherapeut": ["ergotherapeut", "ergotherapie"],
-        "rezeption": ["rezeption", "empfang", "rezeptionist"],
+        "physiotherapeut": ["physiotherapeut", "physiotherapeutin", "physiotherapie", "physio", "kinderphysiotherapeut", "kinderphysiotherapeutin", "mt", "kgg", "training", "sport"],
+        "logopäde": ["logopäde", "logopädin", "logopaedie", "logopädie", "sprachtherapie"],
+        "ergotherapeut": ["ergotherapeut", "ergotherapeutin", "ergotherapie", "ergo"],
+        "rezeption": ["rezeption", "empfang", "rezeptionist", "rezeptionistin"],
         "leitung": ["leitung", "zentrumsmanager", "bereichsleitung", "fachleitung"],
         "verwaltung": ["verwaltung", "admin", "assistenz", "buchhaltung", "office", "teamassistenz"],
     }
