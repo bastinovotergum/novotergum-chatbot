@@ -39,6 +39,9 @@ Antwort: Deine Antwort hier
 
 - Jobs in Düsseldorf:  
   https://novotergum-chatbot.streamlit.app/?frage=Jobs%20Düsseldorf
+
+- Bewebungsprozess Allgemein:  
+  https://novotergum-chatbot.streamlit.app/?frage=Wie%20läuft%20der%20Bewerbungsprozess%20ab?
 ---
 
 ## 📄 Lizenz
