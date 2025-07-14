@@ -414,8 +414,8 @@ if frage_betrifft_job(frage):
 standort = finde_passenden_standort(frage)
 
 if jobs:
-    if standort:
-        st.markdown("**Antwort:**")
+    if frage_hat_standort_intent(frage) and standort:
+        st.markdown("**Standort:**")
         st.markdown(format_standort(standort))
 
     st.markdown("**Offene Stellenangebote:**")
