@@ -34,7 +34,11 @@ Antwort: Deine Antwort hier
 
 ## 🌐 Beispiel-URL
 
-https://<username>-novotergum-chatbot.streamlit.app/?frage=Wo%20ist%20die%20Praxis%20in%20Krefeld
+- Öffnungszeiten in Menden:  
+  https://novotergum-chatbot-hxkkzdnnwaenchvfueber7.streamlit.app/?frage=Öffnungszeiten%20Menden
+
+- Jobs in Düsseldorf:  
+  https://novotergum-chatbot-hxkkzdnnwaenchvfueber7.streamlit.app/?frage=Jobs%20Düsseldorf
 ---
 
 ## 📄 Lizenz
