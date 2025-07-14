@@ -48,6 +48,9 @@ def format_oeffnungszeiten(opening_node):
 # --- Standortdaten laden ---
 @st.cache_resource(show_spinner=False)
 def lade_standorte(xml_path):
+
+    primary_category = eintrag.findtext("primary_category", default="").lower()
+
     try:
         tree = ET.parse(xml_path)
         root = tree.getroot()
@@ -90,7 +93,7 @@ def lade_standorte(xml_path):
                 "url": url,
                 "status": status,
                 "region": region,
-                "primary_category": category,
+                "primary_category": primary_category,
                 "beschreibung": beschreibung,
                 "titel": titel,
                 "zeiten": zeiten,
@@ -180,31 +183,42 @@ def finde_kategorie_in_frage(user_input):
 # --- Standort-Suche mit Fuzzy-Matching (Stadt-Prio) ---
 def finde_passenden_standort(user_input):
     user_input_lower = user_input.lower()
-    ziel_kategorie = finde_kategorie_in_frage(user_input)
 
     kandidaten = []
     for eintrag in standorte_data:
-        if ziel_kategorie and eintrag.get("primary_category") != ziel_kategorie:
-            continue  # filtere unpassende Kategorien raus
-
-        # Matching-Score berechnen
         name = eintrag["name"].lower()
         stadt = eintrag["stadt"].lower()
-        adresse = eintrag["adresse"].lower()
+        titel = eintrag.get("titel", "").lower()
+        kategorie = eintrag.get("beschreibung", "").lower()  # alternativ: extrahiere <primary_category>
+        kategorie = eintrag.get("primary_category", "").lower()
 
-        score = 0
-        if stadt in user_input_lower:
-            score += 3
-        if name in user_input_lower or adresse in user_input_lower:
-            score += 2
-        if any(w in user_input_lower for w in eintrag["suchbegriffe"]):
-            score += 1
+        score_name = fuzz.partial_ratio(user_input_lower, name)
+        score_stadt = fuzz.partial_ratio(user_input_lower, stadt)
+        score_titel = fuzz.partial_ratio(user_input_lower, titel)
+        score_kategorie = fuzz.partial_ratio(user_input_lower, kategorie)
 
-        kandidaten.append((score, eintrag))
+        # Grundscore
+        score_gesamt = max(score_name, score_stadt, score_titel, score_kategorie)
 
-    kandidaten.sort(reverse=True, key=lambda x: x[0])
-    if kandidaten and kandidaten[0][0] > 0:
-        return kandidaten[0][1]
+        # Bonus bei kombinierten Treffern
+        if score_name > 70 and score_stadt > 70:
+            score_gesamt += 10
+
+        # Bonus für exakte Berufsbezeichnung
+        if "ergo" in user_input_lower and "ergo" in kategorie:
+            score_gesamt += 15
+        elif "physio" in user_input_lower and "physio" in kategorie:
+            score_gesamt += 15
+        elif "logo" in user_input_lower and "logo" in kategorie:
+            score_gesamt += 15
+
+        kandidaten.append((eintrag, score_gesamt))
+
+    kandidaten.sort(key=lambda x: x[1], reverse=True)
+
+    if kandidaten and kandidaten[0][1] >= 80:
+        return kandidaten[0][0]
+
     return None
 
 # --- Job-Suche mit Fallback ---
