@@ -358,13 +358,13 @@ def format_standort(eintrag):
 
     # Englisch → Deutsch Übersetzung der Wochentage
     tage_deutsch = {
-        "monday": "Montag",
-        "tuesday": "Dienstag",
-        "wednesday": "Mittwoch",
-        "thursday": "Donnerstag",
-        "friday": "Freitag",
-        "saturday": "Samstag",
-        "sunday": "Sonntag"
+        "Monday": "Montag",
+        "Tuesday": "Dienstag",
+        "Wednesday": "Mittwoch",
+        "Thursday": "Donnerstag",
+        "Friday": "Freitag",
+        "Saturday": "Samstag",
+        "Sunday": "Sonntag"
     }
 
     # Öffnungszeiten formatieren
