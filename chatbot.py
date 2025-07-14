@@ -68,26 +68,26 @@ def lade_standorte(xml_path):
 
             maps_url = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
 
-    # Öffnungszeiten extrahieren
-    wochentage_deutsch = {
-        "Monday": "Montag",
-        "Tuesday": "Dienstag",
-        "Wednesday": "Mittwoch",
-        "Thursday": "Donnerstag",
-        "Friday": "Freitag",
-        "Saturday": "Samstag",
-        "Sunday": "Sonntag"
-    }
-    zeiten_liste = []
-           for hours in eintrag.findall(".//openingHoursSpecification/hours"):
-                tag = hours.findtext("dayOfWeek", "")
-                von = hours.findtext("opens", "")
-                bis = hours.findtext("closes", "")
-                if tag and von and bis:
-                tag_de = wochentage_deutsch.get(tag, tag)  # fallback auf Original
-                zeiten_liste.append(f"{tag_de}: {von}–{bis}")
-
-           zeiten = " | ".join(zeiten_liste) if zeiten_liste else "Nicht verfügbar"
+            # Öffnungszeiten extrahieren
+            wochentage_deutsch = {
+            "Monday": "Montag",
+            "Tuesday": "Dienstag",
+            "Wednesday": "Mittwoch",
+            "Thursday": "Donnerstag",
+            "Friday": "Freitag",
+            "Saturday": "Samstag",
+            "Sunday": "Sonntag"
+            }
+            zeiten_liste = []
+            for hours in eintrag.findall(".//openingHoursSpecification/hours"):
+            tag = hours.findtext("dayOfWeek", "")
+            von = hours.findtext("opens", "")
+            bis = hours.findtext("closes", "")
+            if tag and von and bis:
+            tag_de = wochentage_deutsch.get(tag, tag)  # fallback auf Original
+            zeiten_liste.append(f"{tag_de}: {von}–{bis}")
+            
+            zeiten = " | ".join(zeiten_liste) if zeiten_liste else "Nicht verfügbar"
 
             # Begriffe für Standort-Matching extrahieren
             alle_texte = f"{name} {adresse} {stadt} {titel}".lower()
