@@ -80,6 +80,8 @@ def lade_standorte(xml_path):
             alle_texte = f"{name} {adresse} {stadt} {titel}".lower()
             suchbegriffe = set(re.split(r"[\s\-]+", alle_texte))
 
+            category = (eintrag.findtext("primary_category") or "").strip()
+
             standorte.append({
                 "name": name,
                 "stadt": stadt,
