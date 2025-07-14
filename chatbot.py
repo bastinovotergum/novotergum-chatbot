@@ -13,11 +13,8 @@ except Exception:
     frage_von_url = ""
 
 # --- Initialisierung ---
-@st.cache_resource
-def lade_modell():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
-model = lade_modell()
 # --- Hilfsfunktion: Frage betrifft Standort? ---
 def frage_betrifft_standort(user_input):
     stichworte = [" in ", " bei ", "nähe", "wo ist", "standort", "zentrum", "praxis", "adresse", "map", "google maps"]
@@ -213,8 +210,8 @@ def extrahiere_jobtitel(url):
     blacklist = {
         "m", "w", "d", "in", "fuer", "für", "der", "die", "und", "mit",
         "hausbesuche", "team", "std", "stunden", "woche", "monat", "jahr",
-        "tage", "tageweise", "remote", "hybrid", "minijob", "teilzeit", "vollzeit", 
-        "flexibel", "ab", "sofort", "nach", "vereinbarung", "job", "karriere"
+        "ab", "sofort", "nach", "vereinbarung", "job", "karriere",
+        "bis", "zu", "haus", "heimbesuche"
     }
 
     highlight = {
@@ -252,6 +249,11 @@ def extrahiere_jobtitel(url):
         "administration": "Administration",
         "hausbesuche": "Hausbesuche",
         "heim": "Heimbesuche",
+        "remote": "Remote",
+        "hybrid": "Hybrid",
+        "minijob": "Minijob",
+        "teilzeit": "Teilzeit",
+        "vollzeit": "Vollzeit",
     }
 
     # IDs & Füllwörter entfernen
@@ -307,7 +309,7 @@ job_urls = lade_job_urls()
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="NOVOTERGUM Chatbot")
-st.title("NOVOTERGUM Chatbot 😊")
+st.title("NOVOTERGUM Bewerbungs-FAQ Chatbot 😊")
 st.caption("Letztes Update: 2025-07-13")
 
 params = st.query_params
@@ -323,6 +325,25 @@ def format_standort(eintrag):
         f"🕒 {eintrag['zeiten']}\n"
         f"[🌍 Google Maps öffnen]({eintrag['maps']})"
     )
+
+# --- Vorab: Standortantwort bei klarer Standort-Intention ---
+def frage_hat_standort_intent(frage: str) -> bool:
+    standort_stichworte = [
+        "öffnungszeiten", "wie lange geöffnet", "wann geöffnet", "wann offen",
+        "adresse", "anschrift", "lage", "standort", "zentrum", "praxis", 
+        "wo finde ich", "wo ist", "karte", "google maps", "anfahrt", "anfahrtsbeschreibung", 
+        "telefon", "telefonnummer", "kontakt", "telefonisch erreichbar",
+        "nummer", "sprechzeiten", "besuchszeiten", "map", "maps-link"
+    ]
+    frage_lc = frage.lower()
+    return any(kw in frage_lc for kw in standort_stichworte)
+
+if frage_hat_standort_intent(frage):
+    standort = finde_passenden_standort(frage)
+    if standort:
+        st.markdown("**Antwort:**")
+        st.markdown(format_standort(standort))
+        st.stop()
 
 # --- Beantwortung ---
 if frage:
