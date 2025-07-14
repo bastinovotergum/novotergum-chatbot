@@ -28,10 +28,6 @@ Das Projekt kann direkt über [Streamlit Cloud](https://share.streamlit.io/deplo
 Frage: Deine Frage hier
 Antwort: Deine Antwort hier
 
-yaml
-Kopieren
-Bearbeiten
-
 - Optional: `standorte-test.xml` lokal im Projektordner oder öffentlich erreichbar (z. B. per URL)
 
 ---
@@ -39,11 +35,6 @@ Bearbeiten
 ## 🌐 Beispiel-URL
 
 https://<username>-novotergum-chatbot.streamlit.app/?frage=Wo%20ist%20die%20Praxis%20in%20Krefeld
-
-yaml
-Kopieren
-Bearbeiten
-
 ---
 
 ## 📄 Lizenz
