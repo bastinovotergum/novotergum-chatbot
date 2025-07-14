@@ -164,19 +164,33 @@ def filtere_jobs_nach_beruf(job_urls, frage):
 
     return [url for url in job_urls if url_passt(url)]
 
+# --- Kategorie-Erkennung in Standortfragen ---
+def finde_kategorie_in_frage(user_input):
+    frage_norm = normalisiere(user_input)
+    if "physio" in frage_norm or "krankengymnast" in frage_norm:
+        return "Physiotherapiezentrum"
+    if "ergo" in frage_norm:
+        return "Ergotherapeut"
+    if "logo" in frage_norm or "sprachtherapie" in frage_norm:
+        return "Logopädie"
+    return None  # kein Filter
+    
 # --- Standort-Suche mit Fuzzy-Matching (Stadt-Prio) ---
 def finde_passenden_standort(user_input):
     user_input_lower = user_input.lower()
+    ziel_kategorie = finde_kategorie_in_frage(user_input)
 
     kandidaten = []
     for eintrag in standorte_data:
+        if ziel_kategorie and eintrag.get("primary_category") != ziel_kategorie:
+            continue  # nur passende Kategorien zulassen
+
         name = eintrag["name"].lower()
         stadt = eintrag["stadt"].lower()
         score_name = fuzz.partial_ratio(user_input_lower, name)
         score_stadt = fuzz.partial_ratio(user_input_lower, stadt)
         score_gesamt = max(score_name, score_stadt)
 
-        # Höhere Gewichtung, wenn beide gut passen
         if score_name > 70 and score_stadt > 70:
             score_gesamt += 10
 
@@ -186,7 +200,6 @@ def finde_passenden_standort(user_input):
 
     if kandidaten and kandidaten[0][1] >= 80:
         return kandidaten[0][0]
-
     return None
 
 # --- Job-Suche mit Fallback ---
