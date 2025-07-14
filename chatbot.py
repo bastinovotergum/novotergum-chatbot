@@ -367,8 +367,8 @@ def frage_hat_standort_intent(frage: str) -> bool:
         "öffnungszeiten", "wie lange geöffnet", "wann geöffnet", "wann offen",
         "adresse", "anschrift", "lage", "standort", "zentrum", "praxis", 
         "wo finde ich", "wo ist", "karte", "google maps", "anfahrt", "anfahrtsbeschreibung", 
-        "telefon", "telefonnummer", "kontakt", "telefonisch erreichbar",
-        "nummer", "sprechzeiten", "besuchszeiten", "map", "maps-link"
+        "nummer", "sprechzeiten", "besuchszeiten", "map", "maps-link",
+        "termin", "termine", "terminvereinbarung", "termin machen", "termin buchen"
     ]
     frage_lc = frage.lower()
     return any(kw in frage_lc for kw in standort_stichworte)
