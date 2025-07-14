@@ -354,10 +354,14 @@ frage = st.text_input("Stelle deine Frage:", value=vorgegebene_frage)
 
 # --- Standort-Ausgabeformat ---
 def format_standort(eintrag):
+    telefon_raw = eintrag['telefon'].replace(' ', '').replace('-', '')
+    zeilen = eintrag['zeiten'].split('|')
+    zeiten_formatiert = "\n".join([f"• {z.strip()}" for z in zeilen if z.strip()])
+
     return (
         f"📍 **{eintrag['adresse']}**\n"
-        f"📞 [{eintrag['telefon']}](tel:{eintrag['telefon'].replace(' ', '')})\n"
-        f"🕒 {eintrag['zeiten']}\n"
+        f"📞 [{eintrag['telefon']}](tel:{telefon_raw})\n"
+        f"🕒 **Öffnungszeiten:**\n{zeiten_formatiert}\n"
         f"[🌍 Google Maps öffnen]({eintrag['maps']})"
     )
 
