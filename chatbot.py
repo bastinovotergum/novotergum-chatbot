@@ -355,16 +355,34 @@ frage = st.text_input("Stelle deine Frage:", value=vorgegebene_frage)
 # --- Standort-Ausgabeformat ---
 def format_standort(eintrag):
     telefon_raw = eintrag['telefon'].replace(' ', '').replace('-', '')
-    zeiten_raw = eintrag.get('zeiten', '')
-    
-    # Öffnungszeiten auftrennen und untereinander ausgeben
-    zeilen = zeiten_raw.split('|')
-    zeiten_formatiert = "\n".join([f"• {z.strip()}" for z in zeilen if z.strip()])
+
+    # Englisch → Deutsch Übersetzung der Wochentage
+    tage_deutsch = {
+        "monday": "Montag",
+        "tuesday": "Dienstag",
+        "wednesday": "Mittwoch",
+        "thursday": "Donnerstag",
+        "friday": "Freitag",
+        "saturday": "Samstag",
+        "sunday": "Sonntag"
+    }
+
+    # Öffnungszeiten formatieren
+    zeilen = eintrag.get('zeiten', '').split('|')
+    zeiten_formatiert = []
+    for z in zeilen:
+        parts = z.strip().split(":")
+        if len(parts) == 2:
+            tag_en = parts[0].strip().lower()
+            tag_de = tage_deutsch.get(tag_en, tag_en.capitalize())
+            zeiten_formatiert.append(f"• {tag_de}: {parts[1].strip()}")
+
+    zeiten_output = "\n".join(zeiten_formatiert) if zeiten_formatiert else "Nicht verfügbar"
 
     return (
         f"📍 **{eintrag['adresse']}**\n"
-        f"📞 [{eintrag['telefon']}](tel:{telefon_raw})\n"
-        f"🕒 **Öffnungszeiten:**\n{zeiten_formatiert}\n"
+        f"📞 [**{eintrag['telefon']}**](tel:{telefon_raw})\n"
+        f"🕒 **Öffnungszeiten:**\n{zeiten_output}\n"
         f"[🌍 Google Maps öffnen]({eintrag['maps']})"
     )
 
