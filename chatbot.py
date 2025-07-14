@@ -185,30 +185,30 @@ def finde_passenden_standort(user_input):
 
     kandidaten = []
     for eintrag in standorte_data:
-        name = eintrag.get("name", "").lower()
-        stadt = eintrag.get("stadt", "").lower()
+        name = eintrag["name"].lower()
+        stadt = eintrag["stadt"].lower()
         titel = eintrag.get("titel", "").lower()
-        adresse = eintrag.get("adresse", "").lower()
-        beschreibung = eintrag.get("beschreibung", "").lower()
+        kategorie = eintrag.get("beschreibung", "").lower()  # alternativ: extrahiere <primary_category>
         kategorie = eintrag.get("primary_category", "").lower()
 
-        kombitext = f"{name} {stadt} {titel} {adresse} {beschreibung} {kategorie}"
-        
-        score_kombi = fuzz.partial_ratio(user_input_lower, kombitext)
-        score_adresse = fuzz.token_set_ratio(user_input_lower, adresse)
+        score_name = fuzz.partial_ratio(user_input_lower, name)
+        score_stadt = fuzz.partial_ratio(user_input_lower, stadt)
+        score_titel = fuzz.partial_ratio(user_input_lower, titel)
+        score_kategorie = fuzz.partial_ratio(user_input_lower, kategorie)
 
-        score_gesamt = max(score_kombi, score_adresse)
+        # Grundscore
+        score_gesamt = max(score_name, score_stadt, score_titel, score_kategorie)
 
-        # Bonus bei kombinierter Erwähnung
-        if stadt in user_input_lower and any(t in user_input_lower for t in titel.split()):
+        # Bonus bei kombinierten Treffern
+        if score_name > 70 and score_stadt > 70:
             score_gesamt += 10
 
-        # Bonus für Berufsbezeichnung
-        if "ergo" in user_input_lower and "ergo" in kombitext:
+        # Bonus für exakte Berufsbezeichnung
+        if "ergo" in user_input_lower and "ergo" in kategorie:
             score_gesamt += 15
-        elif "physio" in user_input_lower and "physio" in kombitext:
+        elif "physio" in user_input_lower and "physio" in kategorie:
             score_gesamt += 15
-        elif "logo" in user_input_lower and "logo" in kombitext:
+        elif "logo" in user_input_lower and "logo" in kategorie:
             score_gesamt += 15
 
         kandidaten.append((eintrag, score_gesamt))
