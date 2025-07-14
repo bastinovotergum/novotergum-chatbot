@@ -68,18 +68,17 @@ def lade_standorte(xml_path):
 
             maps_url = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
 
-            # Öffnungszeiten extrahieren
-            wochentage_deutsch = {
-                "Monday": "Montag",
-                "Tuesday": "Dienstag",
-                "Wednesday": "Mittwoch",
-                "Thursday": "Donnerstag",
-                "Friday": "Freitag",
-                "Saturday": "Samstag",
-                "Sunday": "Sonntag"
-            }
-
-           zeiten_liste = []
+    # Öffnungszeiten extrahieren
+    wochentage_deutsch = {
+        "Monday": "Montag",
+        "Tuesday": "Dienstag",
+        "Wednesday": "Mittwoch",
+        "Thursday": "Donnerstag",
+        "Friday": "Freitag",
+        "Saturday": "Samstag",
+        "Sunday": "Sonntag"
+    }
+    zeiten_liste = []
            for hours in eintrag.findall(".//openingHoursSpecification/hours"):
                 tag = hours.findtext("dayOfWeek", "")
                 von = hours.findtext("opens", "")
