@@ -88,6 +88,7 @@ def lade_standorte(xml_path):
                 "url": url,
                 "status": status,
                 "region": region,
+                "primary_category": category,
                 "beschreibung": beschreibung,
                 "titel": titel,
                 "zeiten": zeiten,
@@ -164,29 +165,44 @@ def filtere_jobs_nach_beruf(job_urls, frage):
 
     return [url for url in job_urls if url_passt(url)]
 
+def finde_kategorie_in_frage(user_input):
+    frage_norm = normalisiere(user_input)
+    if "ergo" in frage_norm:
+        return "Ergotherapeut"
+    elif "physio" in frage_norm or "krankengymnast" in frage_norm:
+        return "Physiotherapiezentrum"
+    elif "logo" in frage_norm or "sprachtherapie" in frage_norm:
+        return "Logopädie"
+    return None
+    
 # --- Standort-Suche mit Fuzzy-Matching (Stadt-Prio) ---
 def finde_passenden_standort(user_input):
     user_input_lower = user_input.lower()
+    ziel_kategorie = finde_kategorie_in_frage(user_input)
 
     kandidaten = []
     for eintrag in standorte_data:
+        if ziel_kategorie and eintrag.get("primary_category") != ziel_kategorie:
+            continue  # filtere unpassende Kategorien raus
+
+        # Matching-Score berechnen
         name = eintrag["name"].lower()
         stadt = eintrag["stadt"].lower()
-        score_name = fuzz.partial_ratio(user_input_lower, name)
-        score_stadt = fuzz.partial_ratio(user_input_lower, stadt)
-        score_gesamt = max(score_name, score_stadt)
+        adresse = eintrag["adresse"].lower()
 
-        # Höhere Gewichtung, wenn beide gut passen
-        if score_name > 70 and score_stadt > 70:
-            score_gesamt += 10
+        score = 0
+        if stadt in user_input_lower:
+            score += 3
+        if name in user_input_lower or adresse in user_input_lower:
+            score += 2
+        if any(w in user_input_lower for w in eintrag["suchbegriffe"]):
+            score += 1
 
-        kandidaten.append((eintrag, score_gesamt))
+        kandidaten.append((score, eintrag))
 
-    kandidaten.sort(key=lambda x: x[1], reverse=True)
-
-    if kandidaten and kandidaten[0][1] >= 80:
-        return kandidaten[0][0]
-
+    kandidaten.sort(reverse=True, key=lambda x: x[0])
+    if kandidaten and kandidaten[0][0] > 0:
+        return kandidaten[0][1]
     return None
 
 # --- Job-Suche mit Fallback ---
