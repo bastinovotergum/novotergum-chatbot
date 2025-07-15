@@ -1,8 +1,7 @@
-### Datei: backend/chat_backend.py
-
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sentence_transformers import SentenceTransformer, util
+from rapidfuzz import process, fuzz
 import xml.etree.ElementTree as ET
 import requests
 import os
@@ -41,7 +40,7 @@ def lade_standorte():
         for eintrag in root.findall("standort"):
             name = eintrag.findtext("title", default="")
             stadt = eintrag.findtext("stadt", default="")
-            adresse = f"{eintrag.findtext('strasse', default='')} {eintrag.findtext('postleitzahl', default='')}".strip()
+            adresse = f"{eintrag.findtext('strasse', default='')} {eintrag.findtext('postleitzahl', default='')}`.strip()
             telefon = eintrag.findtext("telefon", default="")
             maps = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
             daten.append({
@@ -57,6 +56,32 @@ def lade_standorte():
         return []
 
 standorte = lade_standorte()
+
+# Standort-Intent erkennen
+def hat_standort_intent(frage: str):
+    standort_keywords = [
+        "adresse", "wo ist", "wo finde ich", "praxis", "zentrum", "öffnungszeiten",
+        "wann geöffnet", "telefon", "nummer", "kontakt", "anfahrt", "google maps", "map"
+    ]
+    return any(kw in frage.lower() for kw in standort_keywords)
+
+# Fuzzy-Matching für Standorte
+def finde_passenden_standort(frage: str):
+    frage_lc = frage.lower()
+    kandidaten = []
+
+    for s in standorte:
+        name = s["name"].lower()
+        stadt = s["stadt"].lower()
+        score_name = fuzz.partial_ratio(frage_lc, name)
+        score_stadt = fuzz.partial_ratio(frage_lc, stadt)
+        score = max(score_name, score_stadt)
+        kandidaten.append((s, score))
+
+    kandidaten.sort(key=lambda x: x[1], reverse=True)
+    if kandidaten and kandidaten[0][1] >= 75:
+        return kandidaten[0][0]
+    return None
 
 # FAQ laden
 def lade_faq():
@@ -109,20 +134,21 @@ def status():
 @app.get("/chat")
 def chat(frage: str = Query(..., description="Nutzerfrage an den Chatbot")):
     try:
-        # Standortlogik
-        for s in standorte:
-            if s["stadt"].lower() in frage.lower():
+        # 1. Standortlogik (Intent + Fuzzy)
+        if hat_standort_intent(frage):
+            standort = finde_passenden_standort(frage)
+            if standort:
                 return {
                     "typ": "standort",
                     "antwort": {
-                        "name": s["name"],
-                        "adresse": s["adresse"],
-                        "telefon": s["telefon"],
-                        "maps": s["maps"]
+                        "name": standort["name"],
+                        "adresse": standort["adresse"],
+                        "telefon": standort["telefon"],
+                        "maps": standort["maps"]
                     }
                 }
 
-        # FAQ-Logik
+        # 2. FAQ
         if faq_embeddings is None or faq_embeddings.shape[0] == 0:
             return {"typ": "fehler", "antwort": "Keine FAQ-Daten verfügbar."}
 
