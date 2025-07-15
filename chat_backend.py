@@ -109,9 +109,11 @@ def chat(frage: str = Query(..., description="Nutzerfrage an den Chatbot")):
             return {"typ": "fehler", "antwort": "Keine FAQ-Daten verfügbar."}
 
         frage_embedding = model.encode(frage, convert_to_tensor=True)
-        scores = util.cos_sim(frage_embedding, faq_embeddings)
-        best_idx = scores.argmax().item()
-        best_score = scores[0][best_idx].item()
+        scores = util.cos_sim(frage_embedding, faq_embeddings)  # → Tensor mit Shape [1, N]
+        scores = scores[0]  # macht daraus 1D-Tensor der Länge N
+
+        best_idx = int(scores.argmax())
+        best_score = float(scores[best_idx])
 
         if best_score > 0.6:
             return {
