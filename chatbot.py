@@ -1,475 +1,190 @@
-import streamlit as st
-import os
-import re
-import requests
-import xml.etree.ElementTree as ET
-from rapidfuzz import process, fuzz
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sentence_transformers import SentenceTransformer, util
+import xml.etree.ElementTree as ET
+import requests
+import os
+import logging
+import re
+from rapidfuzz import fuzz, process
 
-try:
-    query_params = st.query_params
-    frage_von_url = query_params.get("frage", [""])[0]
-except Exception:
-    frage_von_url = ""
+app = FastAPI()
 
-# --- Initialisierung ---
-@st.cache_resource
-def lade_modell():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-model = lade_modell()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("chatbot")
 
-# --- Hilfsfunktion: Frage betrifft Standort? ---
-def frage_betrifft_standort(user_input):
-    stichworte = [" in ", " bei ", "nähe", "wo ist", "standort", "zentrum", "praxis", "adresse", "map", "google maps"]
-    return any(w in user_input.lower() for w in stichworte)
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# --- Hilfsfunktion: Frage betrifft Job? ---
-def frage_betrifft_job(user_input):
-    job_stichworte = [
-        "job", "jobs", "stelle", "stellen", "bewerbung", "bewerben", "karriere", 
-        "jobangebot", "jobangebote", "stellenangebot", "stellenangebote", "ausschreibung"
-    ]
-    return any(w in user_input.lower() for w in job_stichworte)
+STANDORT_XML_URL = "https://novotergum.de/wp-content/uploads/standorte-data.xml"
+JOB_SITEMAP_URL = "https://novotergum.de/novotergum_job-sitemap.xml"
 
-# --- Öffnungszeiten formatieren ---
-def format_oeffnungszeiten(opening_node):
-    if opening_node is None:
-        return "Keine Öffnungszeiten gefunden"
-    tage = []
-    for hours in opening_node.findall("hours"):
-        tag = hours.findtext("dayOfWeek", "").strip()
-        open_time = hours.findtext("opens", "").strip()
-        close_time = hours.findtext("closes", "").strip()
-        if tag and open_time and close_time:
-            tage.append(f"{tag}: {open_time}–{close_time}")
-    return " | ".join(tage)
+# ---------------------- HILFSFUNKTIONEN ----------------------
+def normalisiere(text):
+    return text.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
 
-# --- Standortdaten laden ---
-@st.cache_resource(show_spinner=False)
-def lade_standorte(xml_path):
-
+# ---------------------- STANDORTE ----------------------
+def lade_standorte():
     try:
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
-        standorte = []
+        logger.info("Lade Standortdaten...")
+        r = requests.get(STANDORT_XML_URL)
+        r.raise_for_status()
+        root = ET.fromstring(r.content)
+        daten = []
 
         for eintrag in root.findall("standort"):
             name = eintrag.findtext("title", default="")
-            primary_category = eintrag.findtext("primary_category", default="").lower()
             stadt = eintrag.findtext("stadt", default="")
-            adresse = eintrag.findtext("strasse", default="") + " " + eintrag.findtext("postleitzahl", default="")
+            adresse = f"{eintrag.findtext('strasse', '')} {eintrag.findtext('postleitzahl', '')}".strip()
             telefon = eintrag.findtext("telefon", default="")
-            url = eintrag.findtext("standort_url", default="")
-            status = eintrag.findtext("opening_status", default="")
-            region = eintrag.findtext("region_code", default="")
-            beschreibung = eintrag.findtext("description", default="")
-            titel = eintrag.findtext("title", default="")
-
-            maps_url = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
-
-            # Öffnungszeiten extrahieren
-            wochentage_deutsch = {
-                "Monday": "Montag",
-                "Tuesday": "Dienstag",
-                "Wednesday": "Mittwoch",
-                "Thursday": "Donnerstag",
-                "Friday": "Freitag",
-                "Saturday": "Samstag",
-            "Sunday": "Sonntag"
-            }
-        
-            zeiten_liste = [] 
-            for hours in eintrag.findall(".//openingHoursSpecification/hours"):
-                tag = hours.findtext("dayOfWeek", "")
-                von = hours.findtext("opens", "")
-                bis = hours.findtext("closes", "")
-                if tag and von and bis:
-                    tag_de = wochentage_deutsch.get(tag, tag)  # fallback auf Original
-                    zeiten_liste.append(f"{tag_de}: {von}–{bis}")
-            
-            zeiten = " | ".join(zeiten_liste) if zeiten_liste else "Nicht verfügbar"
-
-            # Begriffe für Standort-Matching extrahieren
-            alle_texte = f"{name} {adresse} {stadt} {titel}".lower()
-            suchbegriffe = set(re.split(r"[\s\-]+", alle_texte))
-
-            category = (eintrag.findtext("primary_category") or "").strip()
-
-            standorte.append({
+            primary_category = (eintrag.findtext("primary_category") or "").lower()
+            maps = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
+            daten.append({
                 "name": name,
                 "stadt": stadt,
                 "adresse": adresse,
                 "telefon": telefon,
-                "url": url,
-                "status": status,
-                "region": region,
+                "maps": maps,
                 "primary_category": primary_category,
-                "beschreibung": beschreibung,
-                "titel": titel,
-                "zeiten": zeiten,
-                "suchbegriffe": suchbegriffe,
-                "maps": maps_url   # <--- hinzugefügt
             })
-
-        return standorte
-
+        return daten
     except Exception as e:
-        print(f"[Fehler beim Laden der Standorte] {e}")
+        logger.error(f"[Fehler beim Laden der Standorte] {e}")
         return []
 
+standorte = lade_standorte()
 
-# --- Job-Sitemap laden ---
-@st.cache_data(show_spinner=False)
+def finde_passenden_standort(frage):
+    frage_lc = frage.lower()
+    kandidaten = []
+    for s in standorte:
+        score = max(
+            fuzz.partial_ratio(frage_lc, s["stadt"].lower()),
+            fuzz.partial_ratio(frage_lc, s["name"].lower()),
+            fuzz.partial_ratio(frage_lc, s.get("primary_category", ""))
+        )
+        if score > 75:
+            kandidaten.append((s, score))
+
+    kandidaten.sort(key=lambda x: x[1], reverse=True)
+    return kandidaten[0][0] if kandidaten else None
+
+# ---------------------- JOBS ----------------------
 def lade_job_urls():
-    sitemap_url = "https://novotergum.de/novotergum_job-sitemap.xml"
     try:
-        response = requests.get(sitemap_url)
-        response.raise_for_status()
-        root = ET.fromstring(response.content)
+        r = requests.get(JOB_SITEMAP_URL)
+        r.raise_for_status()
+        root = ET.fromstring(r.content)
         job_urls = {}
-
         for url_node in root.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}url"):
             loc = url_node.find("{http://www.sitemaps.org/schemas/sitemap/0.9}loc")
             if loc is not None:
                 url = loc.text.strip()
                 slug = url.rstrip("/").split("/")[-1]
-                
-                # Skip Hauptseite /jobs/
-                if slug == "jobs":
-                    continue
-
+                if slug == "jobs": continue
                 teile = slug.split("-")
                 if teile:
                     ort = teile[-1].lower()
                     job_urls.setdefault(ort, []).append(url)
         return job_urls
     except Exception as e:
-        print("[Fehler beim Laden der Job-URLs]", e)
+        logger.error(f"[Fehler beim Laden der Job-URLs] {e}")
         return {}
 
-# --- Hilfsfunktion: Normalisierung (für Umlaute etc.) ---
-def normalisiere(text):
-    return text.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+job_urls = lade_job_urls()
 
-# --- Job-Filter basierend auf Beruf und Frage ---
-def filtere_jobs_nach_beruf(job_urls, frage):
-    frage_norm = normalisiere(frage)
-
-    relevante_berufe = {
-        "physiotherapeut": ["physiotherapeut", "physiotherapeutin", "physiotherapie", "physio", "kinderphysiotherapeut", "kinderphysiotherapeutin", "mt", "kgg", "training", "sport"],
-        "logopäde": ["logopäde", "logopädin", "logopaedie", "logopädie", "sprachtherapie"],
-        "ergotherapeut": ["ergotherapeut", "ergotherapeutin", "ergotherapie", "ergo"],
-        "rezeption": ["rezeption", "empfang", "rezeptionist", "rezeptionistin"],
-        "leitung": ["leitung", "zentrumsmanager", "bereichsleitung", "fachleitung"],
-        "verwaltung": ["verwaltung", "admin", "assistenz", "buchhaltung", "office", "teamassistenz"],
-    }
-
-    gesuchte_begriffe = set()
-    for begriffsliste in relevante_berufe.values():
-        for b in begriffsliste:
-            if normalisiere(b) in frage_norm:
-                gesuchte_begriffe.update(normalisiere(w) for w in begriffsliste)
-
-    # Wenn keine Begriffe erkannt → alle URLs zurückgeben
-    if not gesuchte_begriffe:
-        return job_urls
-
-    def url_passt(url):
-        slug = normalisiere(url.rstrip("/").split("/")[-1])
-        return any(b in slug for b in gesuchte_begriffe)
-
-    return [url for url in job_urls if url_passt(url)]
-
-def finde_kategorie_in_frage(user_input):
-    frage_norm = normalisiere(user_input)
-    if "ergo" in frage_norm:
-        return "Ergotherapeut"
-    elif "physio" in frage_norm or "krankengymnast" in frage_norm:
-        return "Physiotherapiezentrum"
-    elif "logo" in frage_norm or "sprachtherapie" in frage_norm:
-        return "Logopädie"
-    return None
-    
-# --- Standort-Suche mit Fuzzy-Matching (Stadt-Prio) ---
-def finde_passenden_standort(user_input):
-    user_input_lower = user_input.lower()
-
-    kandidaten = []
-    for eintrag in standorte_data:
-        name = eintrag["name"].lower()
-        stadt = eintrag["stadt"].lower()
-        titel = eintrag.get("titel", "").lower()
-        kategorie = eintrag.get("beschreibung", "").lower()  # alternativ: extrahiere <primary_category>
-        kategorie = eintrag.get("primary_category", "").lower()
-
-        score_name = fuzz.partial_ratio(user_input_lower, name)
-        score_stadt = fuzz.partial_ratio(user_input_lower, stadt)
-        score_titel = fuzz.partial_ratio(user_input_lower, titel)
-        score_kategorie = fuzz.partial_ratio(user_input_lower, kategorie)
-
-        # Grundscore
-        score_gesamt = max(score_name, score_stadt, score_titel, score_kategorie)
-
-        # Bonus bei kombinierten Treffern
-        if score_name > 70 and score_stadt > 70:
-            score_gesamt += 10
-
-        # Bonus für exakte Berufsbezeichnung
-        if "ergo" in user_input_lower and "ergo" in kategorie:
-            score_gesamt += 15
-        elif "physio" in user_input_lower and "physio" in kategorie:
-            score_gesamt += 15
-        elif "logo" in user_input_lower and "logo" in kategorie:
-            score_gesamt += 15
-
-        kandidaten.append((eintrag, score_gesamt))
-
-    kandidaten.sort(key=lambda x: x[1], reverse=True)
-
-    if kandidaten and kandidaten[0][1] >= 80:
-        return kandidaten[0][0]
-
-    return None
-    
-# --- Job-Suche mit Fallback ---
 def finde_jobs_fuer_ort(frage):
     frage_lower = frage.lower()
     orte = list(job_urls.keys())
     bester_ort, score, _ = process.extractOne(frage_lower, orte, scorer=fuzz.partial_ratio)
-
     if score >= 80:
         return job_urls[bester_ort]
-
-    # Kein konkreter Ort → zeige alle Jobs
     alle_jobs = []
     for jobliste in job_urls.values():
         alle_jobs.extend(jobliste)
     return alle_jobs
 
-# --- Jobtitel aus URL extrahieren ---
 def extrahiere_jobtitel(url):
-    import re
-
     slug = url.rstrip("/").split("/")[-1]
-    teile = slug.split("-")
+    teile = [t for t in slug.split("-") if not t.isdigit()]
+    return " ".join(t.capitalize() for t in teile if t not in ["m", "w", "d"])
 
-    blacklist = {
-        "m", "w", "d", "in", "fuer", "für", "der", "die", "und", "mit",
-        "hausbesuche", "team", "std", "stunden", "woche", "monat", "jahr",
-        "ab", "sofort", "nach", "vereinbarung", "job", "karriere",
-        "bis", "zu", "haus", "heimbesuche"
-    }
+# ---------------------- FAQ ----------------------
+def lade_faq():
+    faq_dir = "faq"
+    daten = []
+    if not os.path.exists(faq_dir):
+        logger.warning("FAQ-Ordner fehlt.")
+        return daten
+    for datei in os.listdir(faq_dir):
+        if datei.endswith(".txt"):
+            with open(os.path.join(faq_dir, datei), "r", encoding="utf-8") as f:
+                frage, antwort = "", ""
+                for zeile in f:
+                    if zeile.startswith("Frage:"):
+                        frage = zeile.replace("Frage:", "").strip()
+                    elif zeile.startswith("Antwort:"):
+                        antwort = zeile.replace("Antwort:", "").strip()
+                        if frage and antwort:
+                            daten.append((frage, antwort))
+                            frage, antwort = "", ""
+    return daten
 
-    highlight = {
-        "azubi": "(Azubi)",
-        "auszubildender": "(Azubi)",
-        "leitung": "Leitung",
-        "fachliche": "Fachliche Leitung",
-        "empfang": "Empfang",
-        "rezeption": "Rezeption",
-        "rezeptionist": "Rezeptionist",
-        "physiotherapeut": "Physiotherapeut",
-        "kinderphysiotherapeut": "Kinderphysiotherapeut",
-        "osteopath": "Osteopath",
-        "massagetherapeut": "Massagetherapeut",
-        "lymphdrainage": "Lymphdrainage",
-        "ergotherapeut": "Ergotherapeut",
-        "logopaede": "Logopäde",
-        "logopaedie": "Logopädie",
-        "verwaltung": "Verwaltung",
-        "assistenz": "Assistenz",
-        "teamassistenz": "Teamassistenz",
-        "zentrumsmanager": "Zentrumsmanager",
-        "recruiting": "Recruiting",
-        "werkstudent": "Werkstudent",
-        "data": "Datenanalyse",
-        "ki": "KI",
-        "innovation": "Innovation",
-        "buchhaltung": "Buchhaltung",
-        "marketing": "Marketing",
-        "training": "Training",
-        "sport": "Sport",
-        "controller": "Controller",
-        "pmi": "PMI Manager",
-        "office": "Office Management",
-        "administration": "Administration",
-        "hausbesuche": "Hausbesuche",
-        "heim": "Heimbesuche",
-        "remote": "Remote",
-        "hybrid": "Hybrid",
-        "minijob": "Minijob",
-        "teilzeit": "Teilzeit",
-        "vollzeit": "Vollzeit",
-    }
+faq_data = lade_faq()
+faq_fragen = [f[0] for f in faq_data]
+faq_embeddings = model.encode(faq_fragen, convert_to_tensor=True) if faq_fragen else None
 
-    # IDs & Füllwörter entfernen
-    teile = [t for t in teile if not t.isdigit() and t.lower() not in blacklist]
+# ---------------------- ENDPOINTS ----------------------
+@app.get("/")
+def status():
+    return {"status": "OK"}
 
-    titelteile = []
-    ortsteile = []
+@app.get("/chat")
+def chat(frage: str = Query(...)):
+    try:
+        frage_lc = frage.lower()
 
-    for teil in teile:
-        teil_lc = teil.lower()
-        if teil_lc in highlight:
-            titelteile.append(highlight[teil_lc])
-        elif re.match(r"^[a-zäöüß]+$", teil_lc):
-            # potentieller Ortsteil (z. B. "krefeld", "ford", "werke")
-            ortsteile.append(teil.capitalize())
-        else:
-            titelteile.append(teil.capitalize())
+        # Standortlogik
+        standort = finde_passenden_standort(frage)
+        if any(w in frage_lc for w in ["adresse", "wo ist", "standort", "zentrum", "praxis"]):
+            if standort:
+                return {
+                    "typ": "standort",
+                    "antwort": standort
+                }
 
-    jobtitel = " – ".join(titelteile).strip(" –")
+        # FAQ
+        if faq_embeddings is not None:
+            frage_embedding = model.encode(frage, convert_to_tensor=True)
+            scores = util.cos_sim(frage_embedding, faq_embeddings)
+            best_idx = scores[0].argmax().item()
+            best_score = scores[0][best_idx].item()
+            if best_score > 0.6:
+                return {
+                    "typ": "faq",
+                    "frage": faq_data[best_idx][0],
+                    "antwort": faq_data[best_idx][1],
+                    "score": round(best_score, 3)
+                }
 
-    if ortsteile:
-        ort = " ".join(ortsteile)
-        return f"**{jobtitel}** (m/w/d) in **{ort}**"
-    else:
-        return f"**{jobtitel}** (m/w/d)"
+        # Jobs
+        if any(w in frage_lc for w in ["job", "bewerbung", "karriere", "stellen"]):
+            jobs = finde_jobs_fuer_ort(frage)
+            return {
+                "typ": "job",
+                "anzahl": len(jobs),
+                "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]]
+            }
 
-# --- FAQ-Daten laden ---
-faq_dir = "faq"
-faq_data = []
+        return {"typ": "unbekannt", "antwort": "Ich konnte leider nichts Passendes finden."}
 
-for filename in os.listdir(faq_dir):
-    filepath = os.path.join(faq_dir, filename)
-    with open(filepath, "r", encoding="utf-8") as f:
-        frage, antwort = "", ""
-        for line in f:
-            if line.startswith("Frage:"):
-                frage = line.replace("Frage:", "").strip()
-            elif line.startswith("Antwort:"):
-                antwort = line.replace("Antwort:", "").strip()
-                if frage and antwort:
-                    faq_data.append((frage, antwort))
-                    frage, antwort = "", ""
-
-if faq_data:
-    faq_questions = [q for q, _ in faq_data]
-    faq_embeddings = model.encode(faq_questions, convert_to_tensor=True)
-else:
-    faq_questions, faq_embeddings = [], None
-
-# --- Daten laden ---
-standorte_data = lade_standorte("standorte-test.xml")
-job_urls = lade_job_urls()
-
-# --- Streamlit UI ---
-st.set_page_config(page_title="NOVOTERGUM Chatbot")
-st.title("NOVOTERGUM Chatbot 😊")
-st.caption("Letztes Update: 2025-07-13")
-
-params = st.query_params
-vorgegebene_frage = params.get("frage", "")
-frage = st.text_input("Stelle deine Frage:", value=vorgegebene_frage)
-
-
-# --- Standort-Ausgabeformat ---
-def format_standort(eintrag):
-    return (
-        f"📍 **{eintrag['adresse']}**\n"
-        f"📞 [{eintrag['telefon']}](tel:{eintrag['telefon'].replace(' ', '')})\n"
-        f"🕒 {eintrag['zeiten']}\n"
-        f"[🌍 Google Maps öffnen]({eintrag['maps']})"
-    )
-
-# --- Vorab: Standortantwort bei klarer Standort-Intention ---
-def frage_hat_standort_intent(frage: str) -> bool:
-    standort_stichworte = [
-        "öffnungszeiten", "wie lange geöffnet", "wann geöffnet", "wann offen",
-        "adresse", "anschrift", "lage", "standort", "zentrum", "praxis", 
-        "wo finde ich", "wo ist", "karte", "google maps", "anfahrt", "anfahrtsbeschreibung", 
-        "nummer", "sprechzeiten", "besuchszeiten", "map", "maps-link",
-        "termin", "termine", "terminvereinbarung", "termin machen", "termin buchen"
-    ]
-    frage_lc = frage.lower()
-    return any(kw in frage_lc for kw in standort_stichworte)
-
-if frage_hat_standort_intent(frage):
-    standort = finde_passenden_standort(frage)
-    if standort:
-        st.markdown("**Antwort:**")
-        st.markdown(format_standort(standort))
-        st.stop()
-
-# --- Beantwortung ---
-if frage:
-    if faq_embeddings is not None:
-        frage_embedding = model.encode(frage, convert_to_tensor=True)
-        scores = util.cos_sim(frage_embedding, faq_embeddings)
-        best_match_idx = scores.argmax().item()
-        best_score = scores[0][best_match_idx].item()
-
-        if best_score > 0.6:
-            antwort = faq_data[best_match_idx][1]
-            faq_frage = faq_data[best_match_idx][0]
-            if "gehalt" in frage.lower() and "gehalt" not in faq_frage.lower():
-                pass  # ignorieren
-            else:
-                st.markdown("**Antwort:** " + antwort)
-                st.stop()
-        else:
-            st.markdown("❓ Ich habe keine exakte Antwort gefunden. Meintest du vielleicht:")
-            top_k = 3
-            top_scores, top_indices = scores.topk(top_k)
-
-            for idx, score in zip(top_indices[0], top_scores[0]):
-                vorgeschlagene_frage = faq_data[idx.item()][0]
-                if st.button(vorgeschlagene_frage, key=f"vorschlag_{idx.item()}"):
-                    st.query_params.update({"frage": vorgeschlagene_frage})
-                    st.rerun()
-jobs = []
-if frage_betrifft_job(frage):
-    alle_jobs = finde_jobs_fuer_ort(frage)
-    jobs = filtere_jobs_nach_beruf(alle_jobs, frage)
-
-standort = finde_passenden_standort(frage)
-
-if jobs:
-    if frage_hat_standort_intent(frage) and standort:
-        st.markdown("**Standort:**")
-        st.markdown(format_standort(standort))
-
-    st.markdown("**Offene Stellenangebote:**")
-    for job in jobs:
-        titel = extrahiere_jobtitel(job)
-        st.markdown(f"- [{titel}]({job})")
-
-    st.stop()
-
-if standort:
-    st.markdown("**Antwort:**")
-    st.markdown(format_standort(standort))
-    st.stop()
-
-st.warning("Ich konnte leider keine passende Antwort finden.")
-
-def run_chatbot(message: str) -> str:
-    # 1. Standortprüfung
-    if frage_hat_standort_intent(message):
-        standort = finde_passenden_standort(message)
-        if standort:
-            return format_standort(standort)
-
-    # 2. FAQ
-    if faq_embeddings is not None:
-        frage_embedding = model.encode(message, convert_to_tensor=True)
-        scores = util.cos_sim(frage_embedding, faq_embeddings)
-        best_match_idx = scores.argmax().item()
-        best_score = scores[0][best_match_idx].item()
-
-        if best_score > 0.6:
-            antwort = faq_data[best_match_idx][1]
-            return antwort
-
-    # 3. Jobs
-    if frage_betrifft_job(message):
-        alle_jobs = finde_jobs_fuer_ort(message)
-        jobs = filtere_jobs_nach_beruf(alle_jobs, message)
-        if jobs:
-            links = "\n".join(f"- {extrahiere_jobtitel(j)}: {j}" for j in jobs[:5])
-            return f"Folgende Stellenangebote passen zu deiner Anfrage:\n{links}"
-
-    # 4. Fallback
-    return "Ich konnte leider keine passende Antwort finden."
-
+    except Exception as e:
+        logger.exception("Fehler im Chat-Endpunkt")
+        return {"typ": "fehler", "antwort": str(e)}
