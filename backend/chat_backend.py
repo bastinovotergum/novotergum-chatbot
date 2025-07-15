@@ -1,3 +1,5 @@
+### Datei: backend/chat_backend.py
+
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sentence_transformers import SentenceTransformer, util
@@ -8,7 +10,7 @@ import logging
 
 app = FastAPI()
 
-# CORS für z. B. Perspective Funnel
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,7 +58,7 @@ def lade_standorte():
 
 standorte = lade_standorte()
 
-# FAQs laden
+# FAQ laden
 def lade_faq():
     faq_dir = "faq"
     daten = []
@@ -81,6 +83,22 @@ def lade_faq():
 faq_data = lade_faq()
 faq_fragen = [f[0] for f in faq_data]
 faq_embeddings = model.encode(faq_fragen, convert_to_tensor=True) if faq_fragen else None
+
+# Job-URLs laden
+def lade_job_urls():
+    try:
+        sitemap_url = "https://novotergum.de/novotergum_job-sitemap.xml"
+        logger.info(f"Lade Job-Sitemap von {sitemap_url}...")
+        r = requests.get(sitemap_url)
+        r.raise_for_status()
+        root = ET.fromstring(r.content)
+        urls = [url.findtext("{http://www.sitemaps.org/schemas/sitemap/0.9}loc") for url in root.findall("{http://www.sitemaps.org/schemas/sitemap/0.9}url")]
+        return [u for u in urls if u]
+    except Exception as e:
+        logger.error(f"[Fehler beim Laden der Job-URLs] {e}")
+        return []
+
+job_urls = lade_job_urls()
 
 # Healthcheck
 @app.get("/")
