@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-nixpacksPlan = "python"
+nixpacksPlan = { language = "python" }
 
 [deploy]
 startCommand = "uvicorn chat_backend:app --host 0.0.0.0 --port $PORT"
