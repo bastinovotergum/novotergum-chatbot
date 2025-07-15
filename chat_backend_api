@@ -1,0 +1,26 @@
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from chat_logic import run_chatbot, lade_standorte, lade_job_urls
+
+app = FastAPI()
+
+# CORS aktivieren (für Frontend-Zugriff)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Daten vorladen (Standorte & Jobs)
+standorte = lade_standorte("standorte.xml")
+job_urls = lade_job_urls()
+
+@app.get("/chat")
+def chat(frage: str = Query(...)):
+    antwort = run_chatbot(frage, standorte, job_urls)
+    return {
+        "frage": frage,
+        "antwort": antwort
+    }
