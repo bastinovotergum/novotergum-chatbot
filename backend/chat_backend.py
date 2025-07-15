@@ -40,7 +40,7 @@ def lade_standorte():
         for eintrag in root.findall("standort"):
             name = eintrag.findtext("title", default="")
             stadt = eintrag.findtext("stadt", default="")
-            adresse = f"{eintrag.findtext('strasse', default='')} {eintrag.findtext('postleitzahl', default='')}`.strip()
+            adresse = f"{eintrag.findtext('strasse', default='')} {eintrag.findtext('postleitzahl', default='')}".strip()
             telefon = eintrag.findtext("telefon", default="")
             maps = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
             daten.append({
