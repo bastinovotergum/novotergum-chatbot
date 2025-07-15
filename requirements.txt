@@ -2,10 +2,3 @@ streamlit
 requests
 sentence-transformers
 rapidfuzz
-
-# Für API-Backend
-fastapi
-uvicorn[standard]
-
-# Optional, wenn du mit XML arbeitest
-lxml
