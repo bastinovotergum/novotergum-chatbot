@@ -443,3 +443,33 @@ if standort:
     st.stop()
 
 st.warning("Ich konnte leider keine passende Antwort finden.")
+
+def run_chatbot(message: str) -> str:
+    # 1. Standortprüfung
+    if frage_hat_standort_intent(message):
+        standort = finde_passenden_standort(message)
+        if standort:
+            return format_standort(standort)
+
+    # 2. FAQ
+    if faq_embeddings is not None:
+        frage_embedding = model.encode(message, convert_to_tensor=True)
+        scores = util.cos_sim(frage_embedding, faq_embeddings)
+        best_match_idx = scores.argmax().item()
+        best_score = scores[0][best_match_idx].item()
+
+        if best_score > 0.6:
+            antwort = faq_data[best_match_idx][1]
+            return antwort
+
+    # 3. Jobs
+    if frage_betrifft_job(message):
+        alle_jobs = finde_jobs_fuer_ort(message)
+        jobs = filtere_jobs_nach_beruf(alle_jobs, message)
+        if jobs:
+            links = "\n".join(f"- {extrahiere_jobtitel(j)}: {j}" for j in jobs[:5])
+            return f"Folgende Stellenangebote passen zu deiner Anfrage:\n{links}"
+
+    # 4. Fallback
+    return "Ich konnte leider keine passende Antwort finden."
+
