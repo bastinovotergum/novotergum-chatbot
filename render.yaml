@@ -1,10 +1,7 @@
 services:
   - type: web
     name: novotergum-chatbot-api
-    env: python
-    buildCommand: ""
-    startCommand: uvicorn chat_backend:app --host 0.0.0.0 --port 10000
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn chat_backend:app --host 0.0.0.0 --port 10000"
     plan: free
-    envVars:
-      - key: PORT
-        value: 10000
