@@ -6,8 +6,8 @@ import requests
 import os
 import logging
 import re
-from datetime import datetime, timedelta
 from rapidfuzz import fuzz, process
+from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -26,10 +26,6 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 STANDORT_XML_URL = "https://novotergum.de/wp-content/uploads/standorte-data.xml"
 JOB_SITEMAP_URL = "https://novotergum.de/novotergum_job-sitemap.xml"
-
-# ---------------------- CACHES ----------------------
-job_urls_cache = {}
-job_urls_last_loaded = datetime.min
 
 # ---------------------- HILFSFUNKTIONEN ----------------------
 def normalisiere(text):
@@ -82,13 +78,16 @@ def finde_passenden_standort(frage):
     return kandidaten[0][0] if kandidaten else None
 
 # ---------------------- JOBS ----------------------
+job_urls_cache = {}
+job_urls_last_loaded = datetime.min
+
 def lade_job_urls():
     global job_urls_cache, job_urls_last_loaded
     if datetime.now() - job_urls_last_loaded < timedelta(hours=6):
         return job_urls_cache
 
     try:
-        logger.info("Lade Job-Sitemap neu...")
+        logger.info("Lade Job-Sitemap...")
         r = requests.get(JOB_SITEMAP_URL)
         r.raise_for_status()
         root = ET.fromstring(r.content)
@@ -98,7 +97,8 @@ def lade_job_urls():
             if loc is not None:
                 url = loc.text.strip()
                 slug = url.rstrip("/").split("/")[-1]
-                if slug == "jobs": continue
+                if slug == "jobs":
+                    continue
                 teile = slug.split("-")
                 if teile:
                     ort = teile[-1].lower()
@@ -107,25 +107,35 @@ def lade_job_urls():
         job_urls_last_loaded = datetime.now()
         return job_urls_cache
     except Exception as e:
-        logger.error(f"[Fehler beim Nachladen der Job-URLs] {e}")
+        logger.error(f"[Fehler beim Laden der Job-URLs] {e}")
         return job_urls_cache
-
-def finde_jobs_fuer_ort(frage):
-    frage_lower = frage.lower()
-    job_urls = lade_job_urls()
-    orte = list(job_urls.keys())
-    bester_ort, score, _ = process.extractOne(frage_lower, orte, scorer=fuzz.partial_ratio)
-    if score >= 80:
-        return job_urls[bester_ort]
-    alle_jobs = []
-    for jobliste in job_urls.values():
-        alle_jobs.extend(jobliste)
-    return alle_jobs
 
 def extrahiere_jobtitel(url):
     slug = url.rstrip("/").split("/")[-1]
     teile = [t for t in slug.split("-") if not t.isdigit()]
     return " ".join(t.capitalize() for t in teile if t not in ["m", "w", "d"])
+
+def finde_jobs_fuer_ort(frage):
+    frage_lower = frage.lower()
+    job_urls = lade_job_urls()
+    orte = list(job_urls.keys())
+
+    # Ort matchen
+    bester_ort, score, _ = process.extractOne(frage_lower, orte, scorer=fuzz.partial_ratio)
+    if score >= 80:
+        urls = job_urls[bester_ort]
+    else:
+        urls = [u for jobliste in job_urls.values() for u in jobliste]
+
+    # Berufsfilterung basierend auf Slug
+    berufe = ["physio", "physiotherapeut", "logo", "logopaede", "mfa", "arzt", "rezeption", "sport"]
+    berufe_in_frage = [b for b in berufe if b in frage_lower]
+
+    if berufe_in_frage:
+        gefiltert = [u for u in urls if any(b in u.lower() for b in berufe_in_frage)]
+        return gefiltert if gefiltert else urls
+
+    return urls
 
 # ---------------------- FAQ ----------------------
 def lade_faq():
@@ -164,7 +174,7 @@ def chat(frage: str = Query(...)):
 
         # Standortlogik
         standort = finde_passenden_standort(frage)
-        if any(w in frage_lc for w in ["adresse", "wo ist", "standort", "zentrum", "praxis", "oeffnungszeiten"]):
+        if any(w in frage_lc for w in ["adresse", "wo ist", "standort", "zentrum", "praxis"]):
             if standort:
                 return {
                     "typ": "standort",
