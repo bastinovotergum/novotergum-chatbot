@@ -8,7 +8,7 @@ frage = st.text_input("Was möchtest du wissen?", "")
 
 if frage:
     try:
-        r = requests.get("novotergum-chatbot-production.up.railway.app/chat", params={"frage": frage})
+        r = requests.get("https://novotergum-chatbot-production.up.railway.app/chat", params={"frage": frage})
         r.raise_for_status()
         data = r.json()
 
