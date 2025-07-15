@@ -23,7 +23,7 @@ logger = logging.getLogger("chatbot")
 
 # Modell laden
 logger.info("Lade Sprachmodell...")
-model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
 
 # Standortdaten laden
 STANDORT_XML_URL = "https://novotergum.de/wp-content/uploads/standorte-data.xml"
