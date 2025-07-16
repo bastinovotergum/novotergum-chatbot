@@ -50,6 +50,18 @@ faq_data = lade_faq()
 faq_questions = [f[0] for f in faq_data]
 faq_embeddings = model.encode(faq_questions, convert_to_tensor=True) if faq_questions else None
 
+# ---------- STANDORTE INTENT ----------
+
+def frage_hat_standort_intent(frage: str) -> bool:
+    stichworte = [
+        "adresse", "wo ist", "standort", "zentrum", "praxis", "karte", "google maps",
+        "telefon", "nummer", "anrufen", "sprechzeiten", "kontakt", "öffnungszeiten", 
+        "termin", "ergo", "physio", "logo", "logopädie", "logopäde", "ergotherapie", "physiotherapie"
+    ]
+    frage_lc = frage.lower()
+    return any(kw in frage_lc for kw in stichworte)
+
+
 # ---------- STANDORTE ----------
 def lade_standorte():
     try:
@@ -88,16 +100,36 @@ def lade_standorte():
 
 standorte = lade_standorte()
 
-def finde_passenden_standort(frage):
+def finde_passenden_standort(frage: str):
     frage_lc = frage.lower()
     kandidaten = []
+
     for s in standorte:
-        suchstring = f"{s['stadt']} {s['adresse']} {s['name']} {s.get('primary_category', '')}".lower()
-        score = fuzz.token_sort_ratio(frage_lc, suchstring)
+        felder = [
+            s.get("stadt", ""),
+            s.get("adresse", ""),
+            s.get("name", ""),
+            s.get("titel", ""),
+            s.get("beschreibung", ""),
+            s.get("primary_category", ""),
+        ]
+        suchtext = " ".join(felder).lower()
+        score = fuzz.token_set_ratio(frage_lc, suchtext)
+
+        # Bonus für Übereinstimmung mit Berufsbezeichnung
+        if "ergo" in frage_lc and "ergo" in suchtext:
+            score += 10
+        if "physio" in frage_lc and "physio" in suchtext:
+            score += 10
+        if "logo" in frage_lc and "logo" in suchtext:
+            score += 10
+
         if score > 70:
             kandidaten.append((s, score))
+
     kandidaten.sort(key=lambda x: x[1], reverse=True)
     return kandidaten[0][0] if kandidaten else None
+
     
 # ---------- JOBS ----------
 def lade_job_urls():
@@ -172,7 +204,7 @@ def chat(frage: str = Query(...)):
     frage_lc = frage.lower()
 
     # Standortlogik
-    if any(w in frage_lc for w in ["adresse", "wo ist", "standort", "zentrum", "praxis", "öffnungszeiten", "zeiten"]):
+    if frage_hat_standort_intent(frage):
         standort = finde_passenden_standort(frage)
         if standort:
             return {"typ": "standort", "antwort": standort}
