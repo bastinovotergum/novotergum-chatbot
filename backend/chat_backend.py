@@ -71,8 +71,9 @@ def lade_standorte():
         standorte = []
 
         for s in root.findall("standort"):
-            name = s.findtext("title", "")
-            stadt = s.findtext("stadt", "")
+            stadt_roh = s.findtext("stadt", "")
+            stadt = re.sub(r"\s*\(.*?\)", "", stadt_roh).strip()  # Normalisierung
+
             adresse = f"{s.findtext('strasse', '')} {s.findtext('postleitzahl', '')}".strip()
             telefon = s.findtext("telefon", "")
             kategorie = s.findtext("primary_category", "").lower()
@@ -85,7 +86,7 @@ def lade_standorte():
                 if tag and von and bis:
                     zeiten.append(f"{tag}: {von}–{bis}")
             standorte.append({
-                "name": name,
+                "name": s.findtext("title", ""),
                 "stadt": stadt,
                 "adresse": adresse,
                 "telefon": telefon,
