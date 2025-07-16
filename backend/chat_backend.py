@@ -66,12 +66,9 @@ def finde_passenden_standort(frage):
     frage_lc = frage.lower()
     kandidaten = []
     for s in standorte:
-        score = max(
-            fuzz.partial_ratio(frage_lc, s["stadt"].lower()),
-            fuzz.partial_ratio(frage_lc, s["name"].lower()),
-            fuzz.partial_ratio(frage_lc, s.get("primary_category", ""))
-        )
-        if score > 75:
+        kombiniert = f"{s['stadt']} {s['name']} {s['adresse']}".lower()
+        score = fuzz.partial_ratio(frage_lc, kombiniert)
+        if score > 70:
             kandidaten.append((s, score))
 
     kandidaten.sort(key=lambda x: x[1], reverse=True)
@@ -110,32 +107,41 @@ def lade_job_urls():
         logger.error(f"[Fehler beim Laden der Job-URLs] {e}")
         return job_urls_cache
 
-def extrahiere_jobtitel(url):
-    slug = url.rstrip("/").split("/")[-1]
-    teile = [t for t in slug.split("-") if not t.isdigit()]
-    return " ".join(t.capitalize() for t in teile if t not in ["m", "w", "d"])
-
 def finde_jobs_fuer_ort(frage):
     frage_lower = frage.lower()
     job_urls = lade_job_urls()
     orte = list(job_urls.keys())
 
-    # Ort matchen
+    # Ort extrahieren
     bester_ort, score, _ = process.extractOne(frage_lower, orte, scorer=fuzz.partial_ratio)
     if score >= 80:
         urls = job_urls[bester_ort]
     else:
         urls = [u for jobliste in job_urls.values() for u in jobliste]
 
-    # Berufsfilterung basierend auf Slug
-    berufe = ["physio", "physiotherapeut", "logo", "logopaede", "mfa", "arzt", "rezeption", "sport"]
-    berufe_in_frage = [b for b in berufe if b in frage_lower]
+    # Berufsfilter direkt aus Frage ableiten
+    berufsfilter = {
+        "physio": ["physio", "physiotherapeut"],
+        "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
+        "logo": ["logo", "logopaed", "sprachtherapeut"],
+        "sport": ["sport", "trainer"],
+        "rezeption": ["rezept", "empfang", "service"],
+        "arzt": ["arzt", "mediziner"],
+    }
 
-    if berufe_in_frage:
-        gefiltert = [u for u in urls if any(b in u.lower() for b in berufe_in_frage)]
-        return gefiltert if gefiltert else urls
+    relevante_keys = [k for k, v in berufsfilter.items() if any(w in frage_lower for w in v)]
+    if relevante_keys:
+        urls = [
+            u for u in urls
+            if any(k in u.lower() for key in relevante_keys for k in berufsfilter[key])
+        ]
 
     return urls
+
+def extrahiere_jobtitel(url):
+    slug = url.rstrip("/").split("/")[-1]
+    teile = [t for t in slug.split("-") if not t.isdigit()]
+    return " ".join(t.capitalize() for t in teile if t not in ["m", "w", "d"])
 
 # ---------------------- FAQ ----------------------
 def lade_faq():
