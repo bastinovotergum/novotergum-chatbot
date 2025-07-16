@@ -195,21 +195,36 @@ def extrahiere_jobtitel(url):
     return " ".join(t.capitalize() for t in teile if t not in blacklist)
 
 # ---------- ENDPOINT ----------
-@app.get("/")
-def status():
-    return {"status": "OK"}
-
 @app.get("/chat")
 def chat(frage: str = Query(...)):
     frage_lc = frage.lower()
+    antwort = None
 
-    # Standortlogik
-    if frage_hat_standort_intent(frage):
-        standort = finde_passenden_standort(frage)
-        if standort:
-            return {"typ": "standort", "antwort": standort}
+    # ---------- 1. Standorterkennung ----------
+    standort = finde_passenden_standort(frage)
+    hat_standortbezug = any(w in frage_lc for w in [
+        "adresse", "wo ist", "standort", "zentrum", "praxis",
+        "öffnungszeiten", "zeiten", "telefon", "anrufen"
+    ])
+    if standort and hat_standortbezug:
+        return {"typ": "standort", "antwort": standort}
 
-    # FAQ
+    # ---------- 2. Job-Erkennung ----------
+    hat_jobrelevanz = any(w in frage_lc for w in ["job", "bewerbung", "karriere", "stellen"])
+    if hat_jobrelevanz:
+        jobs = finde_jobs_fuer_ort(frage)
+        if jobs:
+            return {
+                "typ": "job",
+                "anzahl": len(jobs),
+                "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
+            }
+
+    # ---------- 3. Standort als Fallback (auch ohne Schlüsselwörter) ----------
+    if standort:
+        return {"typ": "standort", "antwort": standort}
+
+    # ---------- 4. FAQ ----------
     if faq_embeddings is not None:
         frage_embedding = model.encode(frage, convert_to_tensor=True)
         scores = util.cos_sim(frage_embedding, faq_embeddings)
@@ -222,14 +237,5 @@ def chat(frage: str = Query(...)):
                 "antwort": faq_data[best_idx][1],
                 "score": round(best_score, 3),
             }
-
-    # Jobs
-    if any(w in frage_lc for w in ["job", "bewerbung", "karriere", "stellen"]):
-        jobs = finde_jobs_fuer_ort(frage)
-        return {
-            "typ": "job",
-            "anzahl": len(jobs),
-            "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
-        }
 
     return {"typ": "unbekannt", "antwort": "Ich konnte leider nichts Passendes finden."}
