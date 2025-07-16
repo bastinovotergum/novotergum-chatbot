@@ -50,18 +50,6 @@ faq_data = lade_faq()
 faq_questions = [f[0] for f in faq_data]
 faq_embeddings = model.encode(faq_questions, convert_to_tensor=True) if faq_questions else None
 
-# ---------- STANDORTE INTENT ----------
-
-def frage_hat_standort_intent(frage: str) -> bool:
-    stichworte = [
-        "adresse", "wo ist", "standort", "zentrum", "praxis", "karte", "google maps",
-        "telefon", "nummer", "anrufen", "sprechzeiten", "kontakt", "öffnungszeiten", 
-        "termin", "ergo", "physio", "logo", "logopädie", "logopäde", "ergotherapie", "physiotherapie"
-    ]
-    frage_lc = frage.lower()
-    return any(kw in frage_lc for kw in stichworte)
-
-
 # ---------- STANDORTE ----------
 def lade_standorte():
     try:
@@ -71,9 +59,8 @@ def lade_standorte():
         standorte = []
 
         for s in root.findall("standort"):
-            stadt_roh = s.findtext("stadt", "")
-            stadt = re.sub(r"\s*\(.*?\)", "", stadt_roh).strip()  # Normalisierung
-
+            name = s.findtext("title", "")
+            stadt = s.findtext("stadt", "")
             adresse = f"{s.findtext('strasse', '')} {s.findtext('postleitzahl', '')}".strip()
             telefon = s.findtext("telefon", "")
             kategorie = s.findtext("primary_category", "").lower()
@@ -86,7 +73,7 @@ def lade_standorte():
                 if tag and von and bis:
                     zeiten.append(f"{tag}: {von}–{bis}")
             standorte.append({
-                "name": s.findtext("title", ""),
+                "name": name,
                 "stadt": stadt,
                 "adresse": adresse,
                 "telefon": telefon,
@@ -103,36 +90,25 @@ standorte = lade_standorte()
 
 def finde_passenden_standort(frage: str):
     frage_lc = frage.lower()
-    frage_clean = frage_lc.replace("-", " ").replace(",", " ").strip()
     kandidaten = []
 
     for s in standorte:
-        # Alle möglichen Matching-Felder
         felder = [
             s.get("stadt", ""),
             s.get("adresse", ""),
             s.get("name", ""),
-            s.get("title", ""),
+            s.get("titel", ""),
             s.get("beschreibung", ""),
             s.get("primary_category", ""),
-            s.get("standort_url", "")
         ]
-        suchtext = " ".join(felder).lower().replace("-", " ")
+        suchtext = " ".join(felder).lower()
+        score = fuzz.token_set_ratio(frage_lc, suchtext)
 
-        # Basisscore mit Fuzzy-Matching
-        score = fuzz.token_set_ratio(frage_clean, suchtext)
-
-        # Extra-Punkte für klare Teilworte aus title
-        title_clean = s.get("title", "").lower().replace("-", " ")
-        if all(w in title_clean for w in frage_clean.split()):
-            score += 20
-
-        # Extra für Berufsbezug
-        if "ergo" in frage_lc and "ergo" in suchtext:
+        if re.search(r"ergo", frage_lc) and "ergo" in suchtext:
             score += 10
-        if "physio" in frage_lc and "physio" in suchtext:
+        if re.search(r"physio", frage_lc) and "physio" in suchtext:
             score += 10
-        if "logo" in frage_lc and "logo" in suchtext:
+        if re.search(r"logo", frage_lc) and "logo" in suchtext:
             score += 10
 
         if score > 70:
@@ -141,7 +117,6 @@ def finde_passenden_standort(frage: str):
     kandidaten.sort(key=lambda x: x[1], reverse=True)
     return kandidaten[0][0] if kandidaten else None
 
-    
 # ---------- JOBS ----------
 def lade_job_urls():
     try:
@@ -172,29 +147,27 @@ def finde_jobs_fuer_ort(frage):
     job_urls = lade_job_urls()
     orte = list(job_urls.keys())
 
-    # Ort extrahieren
     bester_ort, score, _ = process.extractOne(frage_lower, orte, scorer=fuzz.partial_ratio)
     if score >= 80:
         urls = job_urls[bester_ort]
     else:
         urls = [u for jobliste in job_urls.values() for u in jobliste]
 
-    # Berufsfilter aus Slug
     berufsfilter = {
-        "physio": ["physio", "physiotherapeut"],
-        "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
-        "logo": ["logo", "logopaed", "sprachtherapeut", "logopäde"],
-        "sport": ["sport", "trainer"],
-        "rezeption": ["rezept", "empfang", "service"],
-        "arzt": ["arzt", "mediziner"],
+        "physio": r"physio|physiotherapeut",
+        "ergo": r"ergo|ergotherapie|ergotherapeut",
+        "logo": r"logo|logopaed|sprachtherapeut|logopäde",
+        "sport": r"sport|trainer",
+        "rezeption": r"rezept|empfang|service",
+        "arzt": r"arzt|mediziner",
     }
 
-    relevante_keys = [k for k, terms in berufsfilter.items() if any(term in frage_lower for term in terms)]
+    relevante_keys = [k for k, regex in berufsfilter.items() if re.search(regex, frage_lower)]
 
     if relevante_keys:
         urls = [
             u for u in urls
-            if any(any(term in u.lower() for term in berufsfilter[k]) for k in relevante_keys)
+            if any(re.search(berufsfilter[k], u.lower()) for k in relevante_keys)
         ]
 
     return urls
@@ -206,36 +179,19 @@ def extrahiere_jobtitel(url):
     return " ".join(t.capitalize() for t in teile if t not in blacklist)
 
 # ---------- ENDPOINT ----------
+@app.get("/")
+def status():
+    return {"status": "OK"}
+
 @app.get("/chat")
 def chat(frage: str = Query(...)):
     frage_lc = frage.lower()
-    antwort = None
 
-    # ---------- 1. Standorterkennung ----------
-    standort = finde_passenden_standort(frage)
-    hat_standortbezug = any(w in frage_lc for w in [
-        "adresse", "wo ist", "standort", "zentrum", "praxis",
-        "öffnungszeiten", "zeiten", "telefon", "anrufen"
-    ])
-    if standort and hat_standortbezug:
-        return {"typ": "standort", "antwort": standort}
+    if re.search(r"adresse|wo ist|standort|zentrum|praxis|öffnungs|zeiten|geöffnet|offen|wann hat|wann.*auf", frage_lc):
+        standort = finde_passenden_standort(frage)
+        if standort:
+            return {"typ": "standort", "antwort": standort}
 
-    # ---------- 2. Job-Erkennung ----------
-    hat_jobrelevanz = any(w in frage_lc for w in ["job", "bewerbung", "karriere", "stellen"])
-    if hat_jobrelevanz:
-        jobs = finde_jobs_fuer_ort(frage)
-        if jobs:
-            return {
-                "typ": "job",
-                "anzahl": len(jobs),
-                "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
-            }
-
-    # ---------- 3. Standort als Fallback (auch ohne Schlüsselwörter) ----------
-    if standort:
-        return {"typ": "standort", "antwort": standort}
-
-    # ---------- 4. FAQ ----------
     if faq_embeddings is not None:
         frage_embedding = model.encode(frage, convert_to_tensor=True)
         scores = util.cos_sim(frage_embedding, faq_embeddings)
@@ -248,5 +204,13 @@ def chat(frage: str = Query(...)):
                 "antwort": faq_data[best_idx][1],
                 "score": round(best_score, 3),
             }
+
+    if re.search(r"job|bewerbung|karriere|stellen", frage_lc):
+        jobs = finde_jobs_fuer_ort(frage)
+        return {
+            "typ": "job",
+            "anzahl": len(jobs),
+            "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
+        }
 
     return {"typ": "unbekannt", "antwort": "Ich konnte leider nichts Passendes finden."}
