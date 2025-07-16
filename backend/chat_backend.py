@@ -102,32 +102,36 @@ standorte = lade_standorte()
 
 def finde_passenden_standort(frage: str):
     frage_lc = frage.lower()
+    frage_clean = frage_lc.replace("-", " ").replace(",", " ").strip()
     kandidaten = []
 
-    berufsbegriffe = {
-        "physio": ["physio", "physiotherapeut"],
-        "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
-        "logo": ["logo", "logopädie", "logopaede", "sprachtherapeut"],
-    }
-
-    # erkenne relevante Berufsgruppe(n)
-    relevante_kategorien = [k for k, terms in berufsbegriffe.items() if any(w in frage_lc for w in terms)]
-
     for s in standorte:
-        kategorie = s.get("primary_category", "").lower()
-        stadt = s.get("stadt", "").lower()
-        adresse = s.get("adresse", "").lower()
-        name = s.get("name", "").lower()
+        # Alle möglichen Matching-Felder
+        felder = [
+            s.get("stadt", ""),
+            s.get("adresse", ""),
+            s.get("name", ""),
+            s.get("title", ""),
+            s.get("beschreibung", ""),
+            s.get("primary_category", ""),
+            s.get("standort_url", "")
+        ]
+        suchtext = " ".join(felder).lower().replace("-", " ")
 
-        suchtext = f"{stadt} {adresse} {name} {kategorie}"
+        # Basisscore mit Fuzzy-Matching
+        score = fuzz.token_set_ratio(frage_clean, suchtext)
 
-        score = fuzz.token_set_ratio(frage_lc, suchtext)
+        # Extra-Punkte für klare Teilworte aus title
+        title_clean = s.get("title", "").lower().replace("-", " ")
+        if all(w in title_clean for w in frage_clean.split()):
+            score += 20
 
-        # Bonus, wenn primary_category zum Berufsfilter passt
-        if kategorie in relevante_kategorien:
-            score += 15
-        # Kleiner Bonus für Namens- oder Stadt-Treffer
-        if any(w in frage_lc for w in [stadt, name]):
+        # Extra für Berufsbezug
+        if "ergo" in frage_lc and "ergo" in suchtext:
+            score += 10
+        if "physio" in frage_lc and "physio" in suchtext:
+            score += 10
+        if "logo" in frage_lc and "logo" in suchtext:
             score += 10
 
         if score > 70:
