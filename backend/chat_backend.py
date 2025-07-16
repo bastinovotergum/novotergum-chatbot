@@ -104,24 +104,30 @@ def finde_passenden_standort(frage: str):
     frage_lc = frage.lower()
     kandidaten = []
 
+    berufsbegriffe = {
+        "physio": ["physio", "physiotherapeut"],
+        "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
+        "logo": ["logo", "logopädie", "logopaede", "sprachtherapeut"],
+    }
+
+    # erkenne relevante Berufsgruppe(n)
+    relevante_kategorien = [k for k, terms in berufsbegriffe.items() if any(w in frage_lc for w in terms)]
+
     for s in standorte:
-        felder = [
-            s.get("stadt", ""),
-            s.get("adresse", ""),
-            s.get("name", ""),
-            s.get("titel", ""),
-            s.get("beschreibung", ""),
-            s.get("primary_category", ""),
-        ]
-        suchtext = " ".join(felder).lower()
+        kategorie = s.get("primary_category", "").lower()
+        stadt = s.get("stadt", "").lower()
+        adresse = s.get("adresse", "").lower()
+        name = s.get("name", "").lower()
+
+        suchtext = f"{stadt} {adresse} {name} {kategorie}"
+
         score = fuzz.token_set_ratio(frage_lc, suchtext)
 
-        # Bonus für Übereinstimmung mit Berufsbezeichnung
-        if "ergo" in frage_lc and "ergo" in suchtext:
-            score += 10
-        if "physio" in frage_lc and "physio" in suchtext:
-            score += 10
-        if "logo" in frage_lc and "logo" in suchtext:
+        # Bonus, wenn primary_category zum Berufsfilter passt
+        if kategorie in relevante_kategorien:
+            score += 15
+        # Kleiner Bonus für Namens- oder Stadt-Treffer
+        if any(w in frage_lc for w in [stadt, name]):
             score += 10
 
         if score > 70:
