@@ -92,16 +92,13 @@ def finde_passenden_standort(frage):
     frage_lc = frage.lower()
     kandidaten = []
     for s in standorte:
-        score = max(
-            fuzz.partial_ratio(frage_lc, s["stadt"].lower()),
-            fuzz.partial_ratio(frage_lc, s["name"].lower()),
-            fuzz.partial_ratio(frage_lc, s["primary_category"].lower()),
-        )
-        if score > 75:
+        suchstring = f"{s['stadt']} {s['adresse']} {s['name']} {s.get('primary_category', '')}".lower()
+        score = fuzz.token_sort_ratio(frage_lc, suchstring)
+        if score > 70:
             kandidaten.append((s, score))
     kandidaten.sort(key=lambda x: x[1], reverse=True)
     return kandidaten[0][0] if kandidaten else None
-
+    
 # ---------- JOBS ----------
 def lade_job_urls():
     try:
@@ -129,15 +126,35 @@ job_urls = lade_job_urls()
 
 def finde_jobs_fuer_ort(frage):
     frage_lower = frage.lower()
+    job_urls = lade_job_urls()
     orte = list(job_urls.keys())
+
+    # Ort extrahieren
     bester_ort, score, _ = process.extractOne(frage_lower, orte, scorer=fuzz.partial_ratio)
     if score >= 80:
-        return job_urls[bester_ort]
+        urls = job_urls[bester_ort]
     else:
-        alle_jobs = []
-        for jobliste in job_urls.values():
-            alle_jobs.extend(jobliste)
-        return alle_jobs
+        urls = [u for jobliste in job_urls.values() for u in jobliste]
+
+    # Berufsfilter aus Slug
+    berufsfilter = {
+        "physio": ["physio", "physiotherapeut"],
+        "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
+        "logo": ["logo", "logopaed", "sprachtherapeut", "logopäde"],
+        "sport": ["sport", "trainer"],
+        "rezeption": ["rezept", "empfang", "service"],
+        "arzt": ["arzt", "mediziner"],
+    }
+
+    relevante_keys = [k for k, terms in berufsfilter.items() if any(term in frage_lower for term in terms)]
+
+    if relevante_keys:
+        urls = [
+            u for u in urls
+            if any(any(term in u.lower() for term in berufsfilter[k]) for k in relevante_keys)
+        ]
+
+    return urls
 
 def extrahiere_jobtitel(url):
     slug = url.rstrip("/").split("/")[-1]
