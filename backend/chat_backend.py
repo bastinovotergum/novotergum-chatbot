@@ -94,7 +94,10 @@ def lade_standorte():
             adresse = f"{s.findtext('strasse', '')} {s.findtext('postleitzahl', '')}".strip()
             telefon = s.findtext("telefon", "")
             kategorie = s.findtext("primary_category", "").lower()
-            maps = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
+            title = s.findtext("title", "").strip()
+            url = s.findtext("standort_url", "").strip()
+
+            # Öffnungszeiten extrahieren
             zeiten = []
             for h in s.findall(".//openingHoursSpecification/hours"):
                 tag = h.findtext("dayOfWeek", "")
@@ -102,21 +105,44 @@ def lade_standorte():
                 bis = h.findtext("closes", "")
                 if tag and von and bis:
                     zeiten.append(f"{tag}: {von}–{bis}")
+
+            # Google Maps Link
+            maps = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
+
+            # Slugteile aus URL
+            slugteile = []
+            if url:
+                slug_raw = url.rstrip("/").split("/")[-1]
+                slugteile = slug_raw.replace("-", " ").split()
+
+            # Aliases auf Basis von Stadt, Titel, Slug
+            aliases = list(set([
+                stadt.lower(),
+                stadt.lower().replace("-", " "),
+                title.lower(),
+                title.lower().replace("-", " ")
+            ] + slugteile))
+
+            # Leere Strings filtern
+            aliases = [a.strip() for a in aliases if a.strip()]
+
             standorte.append({
-                "name": s.findtext("title", ""),
+                "name": title,
                 "stadt": stadt,
                 "adresse": adresse,
                 "telefon": telefon,
                 "maps": maps,
                 "zeiten": " | ".join(zeiten) if zeiten else "Nicht verfügbar",
                 "primary_category": kategorie,
+                "title": title.lower(),
+                "slugteile": slugteile,
+                "aliases": aliases
             })
+
         return standorte
     except Exception as e:
         logger.error(f"Fehler beim Laden der Standorte: {e}")
         return []
-
-standorte = lade_standorte()
 
 def finde_passenden_standort(frage: str):
     frage_lc = frage.lower()
@@ -124,6 +150,7 @@ def finde_passenden_standort(frage: str):
     kandidaten = []
 
     for s in standorte:
+        # Basistext für Fuzzy-Matching
         felder = [
             s.get("stadt", ""),
             s.get("adresse", ""),
@@ -131,19 +158,31 @@ def finde_passenden_standort(frage: str):
             s.get("primary_category", "")
         ]
         suchtext = " ".join(felder).lower().replace("-", " ")
-
         score = fuzz.token_set_ratio(frage_clean, suchtext)
 
-        name_clean = s.get("name", "").lower().replace("-", " ")
-        if all(w in name_clean for w in frage_clean.split()):
-            score += 20
+        # Boosts
+        boost = 0
 
+        # 1. Titel-Kompletttreffer
+        title = s.get("title", "")
+        if all(w in title for w in frage_clean.split()):
+            boost += 10
+
+        # 2. Alias-Treffer
+        aliases = s.get("aliases", [])
+        if any(alias in frage_clean for alias in aliases):
+            boost += 15
+
+        # 3. Berufs-Keywords
         if "ergo" in frage_lc and "ergo" in suchtext:
-            score += 10
+            boost += 10
         if "physio" in frage_lc and "physio" in suchtext:
-            score += 10
+            boost += 10
         if "logo" in frage_lc and "logo" in suchtext:
-            score += 10
+            boost += 10
+
+        # Score summieren
+        score += boost
 
         if score > 70:
             kandidaten.append((s, score))
