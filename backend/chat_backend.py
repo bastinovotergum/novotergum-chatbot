@@ -26,7 +26,6 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 STANDORT_XML_URL = "https://novotergum.de/wp-content/uploads/standorte-data.xml"
 JOB_SITEMAP_URL = "https://novotergum.de/novotergum_job-sitemap.xml"
 
-# ---------- FAQ ----------
 def lade_faq():
     faq_dir = "faq"
     daten = []
@@ -51,18 +50,37 @@ faq_data = lade_faq()
 faq_questions = [f[0] for f in faq_data]
 faq_embeddings = model.encode(faq_questions, convert_to_tensor=True) if faq_questions else None
 
-# ---------- STANDORTE INTENT ----------
-def frage_hat_standort_intent(frage: str) -> bool:
-    stichworte = [
-        "adresse", "wo ist", "standort", "zentrum", "praxis", "karte", "google maps",
-        "telefon", "nummer", "anrufen", "sprechzeiten", "kontakt", "öffnungszeiten", 
-        "geöffnet", "offen", "termin", "ergo", "physio", "logo", "logopädie", "logopäde", 
-        "ergotherapie", "physiotherapie"
-    ]
-    frage_lc = frage.lower()
-    return any(kw in frage_lc for kw in stichworte)
+standort_keywords = [
+    "adresse", "wo ist", "standort", "zentrum", "praxis", "karte", "google maps",
+    "telefon", "nummer", "anrufen", "sprechzeiten", "kontakt", "öffnungszeiten",
+    "geöffnet", "offen"
+]
+job_keywords = ["job", "bewerbung", "karriere", "stellen", "stelle", "arbeiten", "arbeit", "position"]
 
-# ---------- STANDORTE ----------
+berufsfilter = {
+    "physio": ["physio", "physiotherapeut", "physiotherapie"],
+    "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
+    "logo": ["logo", "logopäd", "sprachtherapeut", "sprachtherapie", "logopaed", "logopädie"],
+    "sport": ["sport", "trainer", "rehatrainer", "athletik"],
+    "rezeption": ["rezept", "empfang", "service", "rezeption"],
+    "arzt": ["arzt", "mediziner", "orthopäde", "facharzt"],
+}
+
+def bestimme_fragetyp(frage_lc: str):
+    def erste_position(keywords):
+        pos = [frage_lc.find(w) for w in keywords if w in frage_lc]
+        return min(pos) if pos else float('inf')
+
+    pos_standort = erste_position(standort_keywords)
+    pos_job = erste_position(job_keywords)
+
+    if pos_standort < pos_job:
+        return "standort"
+    elif pos_job < pos_standort:
+        return "job"
+    else:
+        return "unentschieden"
+
 def lade_standorte():
     try:
         r = requests.get(STANDORT_XML_URL)
@@ -133,7 +151,6 @@ def finde_passenden_standort(frage: str):
     kandidaten.sort(key=lambda x: x[1], reverse=True)
     return kandidaten[0][0] if kandidaten else None
 
-# ---------- JOBS ----------
 @lru_cache(maxsize=1)
 def lade_job_urls_cached():
     try:
@@ -168,15 +185,6 @@ def finde_jobs_fuer_ort(frage):
     else:
         urls = [u for jobliste in job_urls.values() for u in jobliste]
 
-    berufsfilter = {
-        "physio": ["physio", "physiotherapeut", "physiotherapie"],
-        "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
-        "logo": ["logo", "logopäd", "sprachtherapeut", "sprachtherapie", "logopaed", "logopädie"],
-        "sport": ["sport", "trainer", "rehatrainer", "athletik"],
-        "rezeption": ["rezept", "empfang", "service", "rezeption"],
-        "arzt": ["arzt", "mediziner", "orthopäde", "facharzt"],
-    }
-
     relevante_keys = [k for k, terms in berufsfilter.items() if any(term in frage_lower for term in terms)]
 
     if relevante_keys:
@@ -193,37 +201,13 @@ def extrahiere_jobtitel(url):
     blacklist = {"m", "w", "d", "in"}
     return " ".join(t.capitalize() for t in teile if t not in blacklist)
 
-# ---------- ENDPOINT ----------
 @app.get("/chat")
 def chat(frage: str = Query(...)):
     frage_lc = frage.lower()
+    typ_prioritaet = bestimme_fragetyp(frage_lc)
     standort = finde_passenden_standort(frage)
 
-    # Standortrelevante Begriffe
-    standort_keywords = [
-        "adresse", "wo ist", "standort", "zentrum", "praxis", "karte", "google maps",
-        "telefon", "nummer", "anrufen", "sprechzeiten", "kontakt", "öffnungszeiten",
-        "geöffnet", "offen"
-    ]
-    hat_standortbezug = any(w in frage_lc for w in standort_keywords)
-
-    # Jobrelevante Begriffe
-    job_keywords = ["job", "bewerbung", "karriere", "stellen", "stelle", "arbeiten", "arbeit", "position"]
-    hat_jobrelevanz = any(w in frage_lc for w in job_keywords)
-
-    # Berufsfilterprüfung (wichtiger als reines "job")
-    berufsfilter = {
-        "physio": ["physio", "physiotherapeut", "physiotherapie"],
-        "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
-        "logo": ["logo", "logopäd", "sprachtherapeut", "sprachtherapie", "logopaed", "logopädie"],
-        "sport": ["sport", "trainer", "rehatrainer", "athletik"],
-        "rezeption": ["rezept", "empfang", "service", "rezeption"],
-        "arzt": ["arzt", "mediziner", "orthopäde", "facharzt"],
-    }
-    hat_berufsbezug = any(term in frage_lc for terms in berufsfilter.values() for term in terms)
-
-    # 👉 Prioritätslogik
-    if hat_berufsbezug:
+    if typ_prioritaet == "job":
         jobs = finde_jobs_fuer_ort(frage)
         if jobs:
             return {
@@ -232,22 +216,21 @@ def chat(frage: str = Query(...)):
                 "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
             }
 
-    elif hat_standortbezug and standort:
+    if typ_prioritaet == "standort" and standort:
         return {"typ": "standort", "antwort": standort}
 
-    elif standort:
+    if standort:
         return {"typ": "standort", "antwort": standort}
 
-    elif hat_jobrelevanz:
-        jobs = finde_jobs_fuer_ort(frage)
-        if jobs:
-            return {
-                "typ": "job",
-                "anzahl": len(jobs),
-                "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
-            }
+    jobs = finde_jobs_fuer_ort(frage)
+    if jobs:
+        return {
+            "typ": "job",
+            "anzahl": len(jobs),
+            "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
+        }
 
-    elif faq_embeddings is not None:
+    if faq_embeddings is not None:
         frage_embedding = model.encode(frage, convert_to_tensor=True)
         scores = util.cos_sim(frage_embedding, faq_embeddings)
         best_idx = scores[0].argmax().item()
