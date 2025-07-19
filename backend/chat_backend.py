@@ -144,6 +144,14 @@ def lade_standorte():
         logger.error(f"Fehler beim Laden der Standorte: {e}")
         return []
 
+standorte = []  # global
+
+@app.on_event("startup")
+def init_standorte():
+    global standorte
+    standorte = lade_standorte()
+    logger.info(f"{len(standorte)} Standorte erfolgreich geladen.")
+
 def finde_passenden_standort(frage: str):
     frage_lc = frage.lower()
     frage_clean = frage_lc.replace("-", " ").replace(",", " ").strip()
