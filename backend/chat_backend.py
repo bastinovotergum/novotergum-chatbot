@@ -290,19 +290,26 @@ def extrahiere_jobtitel(url):
 @app.get("/chat")
 def chat(frage: str = Query(...)):
     frage_lc = frage.lower()
+    typ_prioritaet = bestimme_fragetyp(frage_lc)
+    standort = finde_passenden_standort(frage)
 
-    # Spezifisch für Öffnungszeiten
-    if any(kw in frage_lc for kw in ["öffnungszeiten", "wann geöffnet", "wann offen", "wann hat", "wie lange offen"]):
-        standort = finde_passenden_standort(frage)
+    # 1. Öffnungszeiten explizit behandeln
+    if any(kw in frage_lc for kw in ["öffnungszeiten", "wann geöffnet", "wann offen", "wie lange offen", "wann hat"]):
         if standort:
             return {
                 "typ": "öffnungszeiten",
                 "zentrum": standort.get("title"),
+                "stadt": standort.get("stadt"),
                 "zeiten": standort.get("zeiten_raw", []),
+                "hinweis": "Standortdaten aus XML geladen"
+            }
+        else:
+            return {
+                "typ": "faq",
+                "antwort": "Die Öffnungszeiten variieren je nach Zentrum. Bitte schau auf der jeweiligen [Standortseite](https://www.novotergum.de/standorte/) nach."
             }
 
-    typ_prioritaet = bestimme_fragetyp(frage_lc)
-
+    # 2. Jobs
     if typ_prioritaet == "job":
         jobs = finde_jobs_fuer_ort(frage)
         if jobs:
@@ -312,17 +319,15 @@ def chat(frage: str = Query(...)):
                 "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
             }
 
-    if typ_prioritaet == "standort":
-        standort = finde_passenden_standort(frage)
-        if standort:
-            return {"typ": "standort", "antwort": standort}
+    # 3. Standort
+    if typ_prioritaet == "standort" and standort:
+        return {"typ": "standort", "antwort": standort}
 
-    # Nur wenn bisher nichts erkannt wurde → versuche Standort
-    standort = finde_passenden_standort(frage)
+    # 4. Fallback: trotzdem versuchen, ob ein Standort erkannt wurde
     if standort:
         return {"typ": "standort", "antwort": standort}
 
-    # Dann versuche FAQ
+    # 5. FAQ-Matching
     if faq_embeddings is not None:
         frage_embedding = model.encode(frage, convert_to_tensor=True)
         scores = util.cos_sim(frage_embedding, faq_embeddings)
