@@ -293,15 +293,22 @@ def chat(frage: str = Query(...)):
     typ_prioritaet = bestimme_fragetyp(frage_lc)
     standort = finde_passenden_standort(frage)
 
-    # 1. Öffnungszeiten explizit behandeln
-    if any(kw in frage_lc for kw in ["öffnungszeiten", "wann geöffnet", "wann offen", "wie lange offen", "wann hat"]):
+    # 1. Öffnungszeiten explizit behandeln (inkl. Synonyme)
+    if any(kw in frage_lc for kw in [
+        "öffnungszeiten", "wann geöffnet", "wann offen", "wie lange offen",
+        "wann hat", "geöffnet", "offen", "wann macht", "wann ist auf", "betriebszeiten"
+    ]):
         if standort:
             return {
                 "typ": "öffnungszeiten",
                 "zentrum": standort.get("title"),
                 "stadt": standort.get("stadt"),
+                "adresse": standort.get("adresse"),
+                "telefon": standort.get("telefon"),
+                "maps": standort.get("maps"),
+                "standort_url": standort.get("standort_url"),
                 "zeiten": standort.get("zeiten_raw", []),
-                "hinweis": "Standortdaten aus XML geladen"
+                "hinweis": "Öffnungszeiten direkt aus Standortdaten"
             }
         else:
             return {
@@ -309,7 +316,7 @@ def chat(frage: str = Query(...)):
                 "antwort": "Die Öffnungszeiten variieren je nach Zentrum. Bitte schau auf der jeweiligen [Standortseite](https://www.novotergum.de/standorte/) nach."
             }
 
-    # 2. Jobs
+    # 2. Jobs explizit behandeln
     if typ_prioritaet == "job":
         jobs = finde_jobs_fuer_ort(frage)
         if jobs:
@@ -319,15 +326,35 @@ def chat(frage: str = Query(...)):
                 "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
             }
 
-    # 3. Standort
+    # 3. Standortdetails direkt (z. B. Adresse, Telefon)
     if typ_prioritaet == "standort" and standort:
-        return {"typ": "standort", "antwort": standort}
+        return {
+            "typ": "standort",
+            "zentrum": standort.get("title"),
+            "stadt": standort.get("stadt"),
+            "adresse": standort.get("adresse"),
+            "telefon": standort.get("telefon"),
+            "maps": standort.get("maps"),
+            "standort_url": standort.get("standort_url"),
+            "zeiten": standort.get("zeiten_raw", []),
+            "hinweis": "Standortdetails direkt gematcht"
+        }
 
-    # 4. Fallback: trotzdem versuchen, ob ein Standort erkannt wurde
+    # 4. Standort trotzdem zurückgeben, falls erkannt
     if standort:
-        return {"typ": "standort", "antwort": standort}
+        return {
+            "typ": "standort",
+            "zentrum": standort.get("title"),
+            "stadt": standort.get("stadt"),
+            "adresse": standort.get("adresse"),
+            "telefon": standort.get("telefon"),
+            "maps": standort.get("maps"),
+            "standort_url": standort.get("standort_url"),
+            "zeiten": standort.get("zeiten_raw", []),
+            "hinweis": "Standort erkannt, aber nicht priorisiert"
+        }
 
-    # 5. FAQ-Matching
+    # 5. Fallback auf FAQ
     if faq_embeddings is not None:
         frage_embedding = model.encode(frage, convert_to_tensor=True)
         scores = util.cos_sim(frage_embedding, faq_embeddings)
@@ -341,4 +368,8 @@ def chat(frage: str = Query(...)):
                 "score": round(best_score, 3),
             }
 
-    return {"typ": "unbekannt", "antwort": "Ich konnte leider nichts Passendes finden."}
+    # 6. Nichts gefunden
+    return {
+        "typ": "unbekannt",
+        "antwort": "Ich konnte leider nichts Passendes finden."
+    }
