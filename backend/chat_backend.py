@@ -58,12 +58,32 @@ standort_keywords = [
 job_keywords = ["job", "bewerbung", "karriere", "stellen", "stelle", "arbeiten", "arbeit", "position"]
 
 berufsfilter = {
-    "physio": ["physio", "physiotherapeut", "physiotherapie"],
-    "ergo": ["ergo", "ergotherapie", "ergotherapeut"],
-    "logo": ["logo", "logopäd", "sprachtherapeut", "sprachtherapie", "logopaed", "logopädie"],
-    "sport": ["sport", "trainer", "rehatrainer", "athletik"],
-    "rezeption": ["rezept", "empfang", "service", "rezeption"],
-    "arzt": ["arzt", "mediziner", "orthopäde", "facharzt"],
+    "physio": [
+        "physio", "physiotherapeut", "physiotherapie", "physiotherapeutin", "krankengymnast",
+        "krankengymnastik", "kgg", "kg", "mt", "mld", "zns"
+    ],
+    "ergo": [
+        "ergo", "ergotherapie", "ergotherapeut", "ergotherapeutin", "ergotherapeutische behandlung"
+    ],
+    "logo": [
+        "logo", "logopäde", "logopädin", "logopäd", "logopaede", "logopaedie",
+        "sprachtherapie", "sprachtherapeut", "sprachtherapeutin", "sprachheiltherapie"
+    ],
+    "kinder": [
+        "kinderphysio", "kinderphysiotherapeut", "pädiatrie", "kindertherapie", "kind", "kinderbehandlung"
+    ],
+    "leitung": [
+        "leitung", "bereichsleitung", "teamleitung", "fachliche leitung", "leitende", "standortleitung"
+    ],
+    "sport": [
+        "sport", "trainer", "rehatrainer", "athletik", "sporttherapie", "personal trainer", "fitnesstrainer"
+    ],
+    "rezeption": [
+        "rezeption", "rezept", "empfang", "service", "terminvergabe", "front office", "praxisorganisation"
+    ],
+    "arzt": [
+        "arzt", "ärztin", "mediziner", "orthopäde", "facharzt", "unfallarzt", "arztpraxis"
+    ]
 }
 
 def bestimme_fragetyp(frage_lc: str):
@@ -97,14 +117,20 @@ def lade_standorte():
             title = s.findtext("title", "").strip()
             url = s.findtext("standort_url", "").strip()
 
-            # Öffnungszeiten extrahieren
-            zeiten = []
+            # Öffnungszeiten vollständig extrahieren
+            zeiten_raw = []
+            zeiten_text = []
             for h in s.findall(".//openingHoursSpecification/hours"):
                 tag = h.findtext("dayOfWeek", "")
                 von = h.findtext("opens", "")
                 bis = h.findtext("closes", "")
                 if tag and von and bis:
-                    zeiten.append(f"{tag}: {von}–{bis}")
+                    zeiten_raw.append({
+                        "tag": tag,
+                        "von": von,
+                        "bis": bis
+                    })
+                    zeiten_text.append(f"{tag}: {von}–{bis}")
 
             # Google Maps Link
             maps = f"https://www.google.com/maps/search/?api=1&query={adresse.replace(' ', '+')},{stadt.replace(' ', '+')}"
@@ -127,14 +153,27 @@ def lade_standorte():
             aliases = [a.strip() for a in aliases if a.strip()]
 
             standorte.append({
-                "name": title,
-                "stadt": stadt,
-                "adresse": adresse,
+                "store_code": s.findtext("store_code", ""),
+                "stadt": stadt_roh.strip(),
+                "strasse": s.findtext("strasse", ""),
+                "postleitzahl": s.findtext("postleitzahl", ""),
                 "telefon": telefon,
+                "adresse": adresse,
                 "maps": maps,
-                "zeiten": " | ".join(zeiten) if zeiten else "Nicht verfügbar",
+                "standort_url": url,
+                "opening_status": s.findtext("opening_status", ""),
+                "region_code": s.findtext("region_code", ""),
+                "language_code": s.findtext("language_code", ""),
+                "title": title,
+                "description": s.findtext("description", ""),
                 "primary_category": kategorie,
-                "title": title.lower(),
+                "geo": {
+                    "latitude": s.findtext("geo/latitude", ""),
+                    "longitude": s.findtext("geo/longitude", "")
+                },
+                "zeiten": " | ".join(zeiten_text) if zeiten_text else "Nicht verfügbar",
+                "zeiten_raw": zeiten_raw,
+                "title_lower": title.lower(),
                 "slugteile": slugteile,
                 "aliases": aliases
             })
