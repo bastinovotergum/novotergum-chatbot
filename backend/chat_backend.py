@@ -290,8 +290,18 @@ def extrahiere_jobtitel(url):
 @app.get("/chat")
 def chat(frage: str = Query(...)):
     frage_lc = frage.lower()
+
+    # Spezifisch für Öffnungszeiten
+    if any(kw in frage_lc for kw in ["öffnungszeiten", "wann geöffnet", "wann offen", "wann hat", "wie lange offen"]):
+        standort = finde_passenden_standort(frage)
+        if standort:
+            return {
+                "typ": "öffnungszeiten",
+                "zentrum": standort.get("title"),
+                "zeiten": standort.get("zeiten_raw", []),
+            }
+
     typ_prioritaet = bestimme_fragetyp(frage_lc)
-    standort = finde_passenden_standort(frage)
 
     if typ_prioritaet == "job":
         jobs = finde_jobs_fuer_ort(frage)
@@ -302,20 +312,17 @@ def chat(frage: str = Query(...)):
                 "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
             }
 
-    if typ_prioritaet == "standort" and standort:
-        return {"typ": "standort", "antwort": standort}
+    if typ_prioritaet == "standort":
+        standort = finde_passenden_standort(frage)
+        if standort:
+            return {"typ": "standort", "antwort": standort}
 
+    # Nur wenn bisher nichts erkannt wurde → versuche Standort
+    standort = finde_passenden_standort(frage)
     if standort:
         return {"typ": "standort", "antwort": standort}
 
-    jobs = finde_jobs_fuer_ort(frage)
-    if jobs:
-        return {
-            "typ": "job",
-            "anzahl": len(jobs),
-            "jobs": [{"url": j, "titel": extrahiere_jobtitel(j)} for j in jobs[:5]],
-        }
-
+    # Dann versuche FAQ
     if faq_embeddings is not None:
         frage_embedding = model.encode(frage, convert_to_tensor=True)
         scores = util.cos_sim(frage_embedding, faq_embeddings)
