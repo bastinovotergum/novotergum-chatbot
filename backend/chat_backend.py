@@ -201,7 +201,7 @@ def finde_passenden_standort(frage: str):
         felder = [
             s.get("stadt", ""),
             s.get("adresse", ""),
-            s.get("name", ""),
+            s.get("title", ""),  # ✅ Korrektur: vorher 'name'
             s.get("primary_category", "")
         ]
         suchtext = " ".join(felder).lower().replace("-", " ")
@@ -212,7 +212,7 @@ def finde_passenden_standort(frage: str):
 
         # 1. Titel-Kompletttreffer
         title = s.get("title", "")
-        if all(w in title for w in frage_clean.split()):
+        if all(w in title.lower() for w in frage_clean.split()):
             boost += 10
 
         # 2. Alias-Treffer
@@ -228,14 +228,19 @@ def finde_passenden_standort(frage: str):
         if "logo" in frage_lc and "logo" in suchtext:
             boost += 10
 
-        # Score summieren
+        # Gesamt-Score
         score += boost
 
         if score > 70:
             kandidaten.append((s, score))
 
     kandidaten.sort(key=lambda x: x[1], reverse=True)
-    return kandidaten[0][0] if kandidaten else None
+
+    if not kandidaten:
+        logger.warning(f"Kein Standort-Match für: {frage_clean}")
+        return None
+
+    return kandidaten[0][0]
 
 @lru_cache(maxsize=1)
 def lade_job_urls_cached():
